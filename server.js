@@ -8,6 +8,7 @@ const supabase = require('./lib/supabase.js');
 const { requireUser } = require('./lib/auth.js');
 const { extractText } = require('./lib/extract.js');
 const { generateStudyPack } = require('./lib/study-pack.js');
+const { waitUntil } = require('@vercel/functions');
 
 const PORT = process.env.PORT || 3100;
 const PRICE_KOBO = Number(process.env.PRICE_KOBO) || 100000; // 100000 kobo = ₦1,000
@@ -18,15 +19,6 @@ const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt'];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
-
-let waitUntil = null;
-if (process.env.VERCEL) {
-    try {
-        ({ waitUntil } = require('@vercel/functions'));
-    } catch (error) {
-        console.error('Could not load @vercel/functions; background jobs will use the local path.');
-    }
-}
 
 function cleanFileName(value) {
     const name = String(value || '')
@@ -43,7 +35,7 @@ function cleanFileName(value) {
 function startProcessing(orderId) {
     const job = processOrder(orderId);
 
-    if (typeof waitUntil === 'function') {
+    if (process.env.VERCEL && typeof waitUntil === 'function') {
         try {
             waitUntil(job);
             return;
@@ -77,6 +69,10 @@ app.post('/api/uploads', requireUser, async (req, res) => {
     const originalName = cleanFileName(req.body && req.body.name);
     const extension = path.extname(originalName).toLowerCase();
     const size = Number(req.body && req.body.size);
+
+    if (!req.user.email) {
+        return res.status(400).json({ error: 'Your account has no email address.' });
+    }
 
     if (!originalName || !ALLOWED_EXTENSIONS.includes(extension)) {
         return res.status(400).json({ error: 'Only PDF, DOCX or TXT files are allowed.' });
