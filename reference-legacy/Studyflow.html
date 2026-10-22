@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyFlow — Study Smarter</title>
+    <meta name="description" content="Upload your lecture notes and get summaries, flashcards, MCQs and practice questions for your exams. One exam pack for ₦1,000.">
+
+    <!-- Open Graph (WhatsApp / social previews) -->
+    <meta property="og:title" content="StudyFlow — Study Smarter">
+    <meta property="og:description" content="Turn your lecture notes into summaries, flashcards, MCQs and practice tests.">
+    <meta property="og:type" content="website">
+
+    <!-- Simple emoji favicon (replace with your own logo later) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📘</text></svg>">
+
+    <link rel="stylesheet" href="studyflow.css">
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <div class="logo">Study<span>Flow</span></div>
+
+        <button class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
+            <span></span><span></span><span></span>
+        </button>
+
+        <div class="nav-links" id="navLinks">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#upload" class="nav-btn">Get Started</a>
+        </div>
+    </nav>
+
+    <main>
+
+        <section class="hero">
+            <div class="hero-content">
+                <p class="eyebrow">AI-POWERED STUDY TOOL</p>
+
+                <h1>
+                    Turn your lecture notes
+                    into your <span>study flow.</span>
+                </h1>
+
+                <p class="hero-text">
+                    Upload your lecture materials and let StudyFlow
+                    create summaries, flashcards, MCQs and practice
+                    questions designed to help you prepare for exams.
+                </p>
+
+                <div class="hero-buttons">
+                    <a href="#upload" class="primary-btn">Create My Study Pack</a>
+                    <a href="#how-it-works" class="secondary-btn">See How It Works</a>
+                </div>
+            </div>
+
+            <div class="upload-card" id="upload">
+                <div class="upload-icon" aria-hidden="true">↑</div>
+                <h3>Upload your material</h3>
+                <p>PDF, DOCX or lecture notes</p>
+
+                <input type="file" id="fileInput" accept=".pdf,.docx,.txt" hidden>
+                <button class="upload-btn" id="chooseFile" type="button">Choose File</button>
+                <p class="file-name" id="fileName" aria-live="polite"></p>
+            </div>
+        </section>
+
+
+        <section id="features" class="features">
+            <div class="section-heading">
+                <p class="eyebrow">WHAT YOU GET</p>
+                <h2>Everything you need to study smarter.</h2>
+            </div>
+
+            <div class="feature-grid">
+
+                <div class="feature-card">
+                    <div class="feature-number">01</div>
+                    <h3>Smart Summaries</h3>
+                    <p>
+                        Turn long lecture materials into clear,
+                        exam-focused summaries.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-number">02</div>
+                    <h3>Flashcards</h3>
+                    <p>
+                        Automatically generate flashcards from
+                        your most important concepts.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-number">03</div>
+                    <h3>MCQs</h3>
+                    <p>
+                        Practice with AI-generated multiple-choice
+                        questions based on your material.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-number">04</div>
+                    <h3>Practice Tests</h3>
+                    <p>
+                        Test yourself before the real exam with
+                        personalized practice questions.
+                    </p>
+                </div>
+
+            </div>
+        </section>
+
+
+        <section id="how-it-works" class="how-it-works">
+            <div class="section-heading">
+                <p class="eyebrow">HOW IT WORKS</p>
+                <h2>From lecture notes to exam prep.</h2>
+            </div>
+
+            <ol class="steps">
+
+                <li class="step">
+                    <span>01</span>
+                    <h3>Upload</h3>
+                    <p>Upload your lecture material.</p>
+                </li>
+
+                <li class="step">
+                    <span>02</span>
+                    <h3>Process</h3>
+                    <p>StudyFlow analyzes your material.</p>
+                </li>
+
+                <li class="step">
+                    <span>03</span>
+                    <h3>Study</h3>
+                    <p>Get your personalized study pack.</p>
+                </li>
+
+            </ol>
+        </section>
+
+
+        <section id="pricing" class="pricing">
+            <p class="eyebrow">SIMPLE PRICING</p>
+            <h2>One exam pack. ₦5,000.</h2>
+
+            <p>
+                Upload your material and receive your
+                AI-generated study pack.
+            </p>
+
+            <!-- Hook your Paystack / Flutterwave checkout to this button later -->
+            <button class="primary-btn" type="button" id="buyBtn">Get My Study Pack</button>
+        </section>
+
+    </main>
+
+
+    <footer>
+        <div class="logo">Study<span>Flow</span></div>
+        <p>Study smarter. Prepare better.</p>
+    </footer>
+
+    <script>
+        // Mobile menu
+        const menuToggle = document.getElementById('menuToggle');
+        const navLinks = document.getElementById('navLinks');
+
+        function closeMenu() {
+            navLinks.classList.remove('open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.setAttribute('aria-label', 'Open menu');
+        }
+
+        menuToggle.addEventListener('click', () => {
+            const isOpen = navLinks.classList.toggle('open');
+            menuToggle.setAttribute('aria-expanded', String(isOpen));
+            menuToggle.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
+        });
+
+        navLinks.querySelectorAll('a').forEach(link => link.addEventListener('click', closeMenu));
+
+        // File upload
+        const fileInput = document.getElementById('fileInput');
+        const chooseFile = document.getElementById('chooseFile');
+        const fileName = document.getElementById('fileName');
+        const uploadCard = document.getElementById('upload');
+
+        function showFile(file) {
+            fileName.textContent = file ? '✓ ' + file.name : '';
+        }
+
+        chooseFile.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => showFile(fileInput.files[0]));
+
+        // Drag and drop
+        ['dragenter', 'dragover'].forEach(evt =>
+            uploadCard.addEventListener(evt, e => {
+                e.preventDefault();
+                uploadCard.classList.add('dragover');
+            })
+        );
+
+        ['dragleave', 'drop'].forEach(evt =>
+            uploadCard.addEventListener(evt, e => {
+                e.preventDefault();
+                uploadCard.classList.remove('dragover');
+            })
+        );
+
+        uploadCard.addEventListener('drop', e => {
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                fileInput.files = e.dataTransfer.files;
+                showFile(file);
+            }
+        });
+    </script>
+
+</body>
+</html>

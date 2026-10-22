@@ -1,0 +1,9 @@
+body.auth-open { overflow: hidden; }
+.legacy-surface .auth-sheet h2 { font-family: var(--font); font-size: var(--text-3xl); }
+.legacy-surface .auth-dialog { color: var(--ink); }
+.account-field { padding-bottom: var(--s2); }
+.account-field .wide { font-size: var(--text-sm); }
+@media (min-width: 768px) and (max-width: 1100px) {
+  .site-nav { gap: 16px; }
+  .header-inner { gap: 16px; }
+}
