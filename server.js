@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const express = require('express');
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -14,30 +13,49 @@ const PORT = process.env.PORT || 3100;
 const PRICE_KOBO = Number(process.env.PRICE_KOBO) || 100000; // 100000 kobo = ₦1,000
 const PRICE_LABEL = '₦' + (PRICE_KOBO / 100).toLocaleString('en-NG');
 const MAX_FILE_MB = 10;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt'];
-const MIME_BY_EXTENSION = {
-    '.pdf': 'application/pdf',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.txt': 'text/plain'
-};
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const DIST_DIR = path.join(__dirname, 'dist');
+const PUBLIC_DIR = path.join(__dirname, 'public');
 
-/* ============================================================
-   FILE UPLOADS
-   Kept in memory just long enough to reach Supabase Storage.
-   ============================================================ */
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: MAX_FILE_MB * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase();
-        if (!ALLOWED_EXTENSIONS.includes(ext)) {
-            return cb(new Error('Only PDF, DOCX or TXT files are allowed.'));
-        }
-        cb(null, true);
+let waitUntil = null;
+if (process.env.VERCEL) {
+    try {
+        ({ waitUntil } = require('@vercel/functions'));
+    } catch (error) {
+        console.error('Could not load @vercel/functions; background jobs will use the local path.');
     }
-});
+}
+
+function cleanFileName(value) {
+    const name = String(value || '')
+        .split(/[\\/]/)
+        .pop()
+        .trim();
+
+    if (name.length <= 180) return name;
+
+    const extension = path.extname(name);
+    return name.slice(0, Math.max(0, 180 - extension.length)) + extension;
+}
+
+function startProcessing(orderId) {
+    const job = processOrder(orderId);
+
+    if (typeof waitUntil === 'function') {
+        try {
+            waitUntil(job);
+            return;
+        } catch (error) {
+            console.error('Could not register background job:', error);
+        }
+    }
+
+    job.catch((error) => {
+        console.error('Background generation failed for order ' + orderId + ':', error);
+    });
+}
 
 /* ============================================================
    APP
@@ -53,39 +71,128 @@ app.get('/api/config', (req, res) => {
     });
 });
 
-// 1. Create an order and store the uploaded file (signed-in users only)
-app.post('/api/orders', requireUser, upload.single('file'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'Please upload a file.' });
+// 1a. Create a signed upload URL. The browser uploads directly to Supabase,
+// so Vercel's 4.5 MB function request limit does not apply.
+app.post('/api/uploads', requireUser, async (req, res) => {
+    const originalName = cleanFileName(req.body && req.body.name);
+    const extension = path.extname(originalName).toLowerCase();
+    const size = Number(req.body && req.body.size);
+
+    if (!originalName || !ALLOWED_EXTENSIONS.includes(extension)) {
+        return res.status(400).json({ error: 'Only PDF, DOCX or TXT files are allowed.' });
     }
+
+    if (!Number.isFinite(size) || size <= 0) {
+        return res.status(400).json({ error: 'That file looks empty. Choose another file.' });
+    }
+
+    if (size > MAX_FILE_BYTES) {
+        return res.status(400).json({
+            error: 'That file is larger than ' + MAX_FILE_MB + 'MB.'
+        });
+    }
+
+    const id = crypto.randomUUID();
+    const storagePath = 'orders/' + req.user.id + '/' + id + extension;
+
+    try {
+        const uploadTicket = await supabase.createSignedUploadUrl(storagePath);
+        return res.json({
+            id,
+            path: storagePath,
+            bucket: uploadTicket.bucket,
+            token: uploadTicket.token
+        });
+    } catch (error) {
+        console.error('Could not create upload URL:', error);
+        return res.status(502).json({ error: 'We could not prepare your upload. Please try again.' });
+    }
+});
+
+// 1b. Finalize the order after the browser has put the file in Supabase Storage.
+app.post('/api/orders', requireUser, async (req, res) => {
+    const id = String((req.body && req.body.id) || '').trim();
+    const originalName = cleanFileName(req.body && req.body.originalName);
+    const extension = path.extname(originalName).toLowerCase();
+    const suppliedPath = String((req.body && req.body.path) || '').trim();
+
+    if (!UUID_PATTERN.test(id)) {
+        return res.status(400).json({ error: 'That upload is not valid. Choose your file again.' });
+    }
+
+    if (!originalName || !ALLOWED_EXTENSIONS.includes(extension)) {
+        return res.status(400).json({ error: 'Only PDF, DOCX or TXT files are allowed.' });
+    }
+
     if (!req.user.email) {
         return res.status(400).json({ error: 'Your account has no email address.' });
     }
 
-    const id = crypto.randomUUID();
-    const extension = path.extname(req.file.originalname).toLowerCase();
-    const storagePath = 'orders/' + id + extension;
+    const storagePath = 'orders/' + req.user.id + '/' + id + extension;
+
+    if (suppliedPath && suppliedPath !== storagePath) {
+        return res.status(400).json({ error: 'That upload is not valid. Choose your file again.' });
+    }
+
+    let metadata;
+
+    try {
+        metadata = await supabase.getObjectMetadata(storagePath);
+    } catch (error) {
+        console.error('Could not check upload:', error);
+        return res.status(502).json({ error: 'We could not check your upload. Please try again.' });
+    }
+
+    if (!metadata) {
+        return res.status(400).json({
+            error: 'We could not find that upload. Please choose your file again.'
+        });
+    }
+
+    if (!metadata.size) {
+        return res.status(400).json({
+            error: 'That upload looks empty. Please choose your file again.'
+        });
+    }
+
+    if (metadata.size > MAX_FILE_BYTES) {
+        await supabase.removeObject(storagePath).catch(() => {});
+        return res.status(400).json({
+            error: 'That file is larger than ' + MAX_FILE_MB + 'MB.'
+        });
+    }
 
     const order = {
         id,
         user_id: req.user.id,
         email: req.user.email,
-        original_name: req.file.originalname,
+        original_name: originalName,
         storage_path: storagePath,
         reference: 'SF-' + crypto.randomBytes(8).toString('hex'),
         amount: PRICE_KOBO
     };
 
     try {
-        await supabase.uploadObject(
-            storagePath,
-            req.file.buffer,
-            req.file.mimetype || MIME_BY_EXTENSION[extension]
-        );
         await supabase.insertOrder(order);
     } catch (error) {
+        const duplicate = /duplicate key|23505/i.test(error.message || '');
+        const existing = duplicate
+            ? await supabase.getOrderForUser(id, req.user.id).catch(() => null)
+            : null;
+
+        if (existing && existing.storage_path === storagePath) {
+            return res.json({
+                id: existing.id,
+                reference: existing.reference,
+                amount: existing.amount
+            });
+        }
+
+        if (!duplicate) {
+            await supabase.removeObject(storagePath).catch(() => {});
+        }
+
         console.error('Could not create order:', error);
-        await supabase.removeObject(storagePath).catch(() => {});
         return res.status(502).json({ error: 'We could not save your upload. Please try again.' });
     }
 
@@ -137,7 +244,7 @@ app.post('/api/orders/:id/verify', requireUser, async (req, res) => {
     try {
         // Only the first verify wins, so a double click cannot start two jobs.
         const claimed = await supabase.markPaid(order.id);
-        if (claimed) processOrder(order.id); // runs in the background
+        if (claimed) startProcessing(order.id);
     } catch (error) {
         console.error('Could not start order ' + order.id + ':', error);
         return res.status(500).json({
@@ -235,11 +342,11 @@ async function processOrder(orderId) {
 /* ============================================================
    STATIC FRONTEND
    ============================================================ */
-if (fs.existsSync(DIST_DIR)) {
-    app.use(express.static(DIST_DIR));
+if (fs.existsSync(PUBLIC_DIR)) {
+    app.use(express.static(PUBLIC_DIR));
 
     app.get(/^(?!\/api).*/, (req, res) => {
-        res.sendFile(path.join(DIST_DIR, 'index.html'));
+        res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
     });
 } else {
     app.get('/', (req, res) => {
@@ -247,36 +354,42 @@ if (fs.existsSync(DIST_DIR)) {
     });
 }
 
-/* ---------- Error handler (upload errors, etc.) ---------- */
+/* ---------- Error handler ---------- */
 app.use((error, req, res, next) => {
-    const message =
-        error.code === 'LIMIT_FILE_SIZE'
-            ? 'That file is larger than ' + MAX_FILE_MB + 'MB.'
-            : error.message || 'Something went wrong.';
-    res.status(400).json({ error: message });
+    console.error('Request failed:', error);
+    res.status(400).json({ error: error.message || 'Something went wrong.' });
 });
 
 function looksLikePlaceholder(value) {
     return !value || /x{8,}|your[-_]/i.test(value);
 }
 
-app.listen(PORT, () => {
-    console.log('StudyFlow running at http://localhost:' + PORT);
+function startServer() {
+    app.listen(PORT, () => {
+        console.log('StudyFlow running at http://localhost:' + PORT);
 
-    if (!supabase.isConfigured()) {
-        console.warn(
-            'WARNING: Supabase is not configured — orders and uploads will fail until .env is filled in.'
-        );
-    }
-    if (!process.env.GEMINI_API_KEY) {
-        console.warn('WARNING: GEMINI_API_KEY is not set — study pack generation will fail.');
-    }
-    if (
-        looksLikePlaceholder(process.env.PAYSTACK_PUBLIC_KEY) ||
-        looksLikePlaceholder(process.env.PAYSTACK_SECRET_KEY)
-    ) {
-        console.warn(
-            'WARNING: Paystack keys look like placeholders — add your real test or live keys to .env.'
-        );
-    }
-});
+        if (!supabase.isConfigured()) {
+            console.warn(
+                'WARNING: Supabase is not configured — orders and uploads will fail until .env is filled in.'
+            );
+        }
+        if (!process.env.GEMINI_API_KEY) {
+            console.warn('WARNING: GEMINI_API_KEY is not set — study pack generation will fail.');
+        }
+        if (
+            looksLikePlaceholder(process.env.PAYSTACK_PUBLIC_KEY) ||
+            looksLikePlaceholder(process.env.PAYSTACK_SECRET_KEY)
+        ) {
+            console.warn(
+                'WARNING: Paystack keys look like placeholders — add your real test or live keys to .env.'
+            );
+        }
+    });
+}
+
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = app;
+module.exports.config = { maxDuration: 300 };

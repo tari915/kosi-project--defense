@@ -11,8 +11,10 @@ marketing landing page; the about page lives at `/welcome`.
 
 - **Frontend:** React 19 + Vite, with a small client-side router for the product
   pages (`/`, `/dashboard`, `/pack/:id`, `/sample`, `/account`, `/welcome`, `/help`)
-- **Backend:** Express, Paystack verify, Supabase Postgres + private Storage,
-  Google Gemini for generation, multer for uploads
+- **Backend:** Express on Vercel Functions, Paystack verify, Supabase Postgres +
+  private Storage, Google Gemini for generation
+- **Uploads:** the browser uploads directly to Supabase Storage with a short-lived
+  signed URL from the API, so Vercel's request-body limit is not involved
 - **Accounts:** Supabase Auth (email + password, email confirmation, password reset)
 - **Styles:** the paper-and-ink editorial system with a violet accent (`#5b4bdb`).
   Instrument Serif + Instrument Sans + IBM Plex Mono are self-hosted via `@fontsource`
@@ -121,18 +123,22 @@ Legacy links are redirected in `src/main.jsx`: `/?order=<id>` opens `/pack/<id>`
 
 1. The buyer must be signed in. The workspace sign-in button, account shortcut and
    checkout form all open the same auth dialog.
-2. `POST /api/orders` verifies the Supabase access token, validates the upload, puts
-   the file in the private bucket, and inserts a `pending` order row linked to the
-   user's `user_id`. The server uses the account email, not a client-supplied one.
-3. The browser opens Paystack with the order reference.
-4. `POST /api/orders/:id/verify` checks ownership and the transaction with Paystack's
+2. `POST /api/uploads` verifies the Supabase access token, validates the file name and
+   size, and returns a signed Supabase Storage upload URL for a private object path.
+   The browser uploads the file directly to Supabase.
+3. `POST /api/orders` verifies ownership and metadata, checks that the uploaded object
+   exists and is within the 10 MB limit, then inserts a `pending` order row linked to
+   the user's `user_id`. The server uses the account email, not a client-supplied one.
+4. The browser opens Paystack with the order reference.
+5. `POST /api/orders/:id/verify` checks ownership and the transaction with Paystack's
    API. Only a successful `pending → paid` update starts the job, so a double verify
    cannot run twice.
-5. The server downloads the file, extracts text (pdf-parse / mammoth / UTF-8), sends
-   it to Gemini, and saves the JSON result as `ready`.
-6. The source upload is deleted after a successful generation. Failed jobs keep
+6. The server downloads the file, extracts text (pdf-parse / mammoth / UTF-8), sends
+   it to Gemini, and saves the JSON result as `ready`. On Vercel this work is kept
+   alive with `waitUntil`; locally it runs in the background process.
+7. The source upload is deleted after a successful generation. Failed jobs keep
    their file (private) and their status is `failed`.
-7. The pack page polls `GET /api/orders/:id` until `ready` or `failed`; the dashboard
+8. The pack page polls `GET /api/orders/:id` until `ready` or `failed`; the dashboard
    polls its own list while any pack is active.
 
 All order reads and verifies require a valid access token and match the order's
@@ -155,28 +161,46 @@ npm run build
 npm start
 ```
 
-Express serves `dist/` and falls back to `index.html` for every non-`/api` route, so
-`/dashboard`, `/pack/:id`, `/help` and the other client routes work on a refresh.
-Run it on a Node host that stays alive (Render, Railway, Fly, a VPS) — generation
-happens in the background after the request returns, so a purely static host is not
-enough.
+The Vite build goes to `public/`. Locally, Express serves it and falls back to
+`index.html` for every non-`/api` route. On Vercel, `public/**` is served from the CDN
+and `vercel.json` handles the same SPA fallback.
 
-Set the same environment variables in the host's dashboard (including the two
-`VITE_SUPABASE_*` values at **build** time), use live Paystack keys, update the
-Supabase Site URL and redirect URLs to the production domain, and keep
-`SUPABASE_SERVICE_ROLE_KEY` server-side. Add a Paystack webhook as a second path to
+### Vercel
+
+1. Import the repository at <https://vercel.com/new>. `vercel.json` selects the
+   Express preset and the `npm run build` build command.
+2. Add every variable from `.env` in **Project Settings → Environment Variables**.
+   The two `VITE_SUPABASE_*` values must exist at **build** time; the rest are
+   server-side runtime values.
+3. Set the Supabase **Site URL** and **Redirect URLs** to the Vercel production domain
+   (and preview domains if you use them).
+4. Use live Paystack keys and add the Vercel domain to the Paystack dashboard.
+5. `vercel.json` sets the API function's `maxDuration` to 300 seconds (Vercel's
+   Hobby maximum). Generation is kept alive with `waitUntil`; raise the limit if
+   you need longer, or move long work to a queue or Supabase Edge Function.
+6. Keep `SUPABASE_SERVICE_ROLE_KEY` server-side. It is never exposed through a
+   `VITE_*` variable.
+
+Uploads go from the browser directly to Supabase Storage, so they are not limited by
+Vercel's 4.5 MB function request size. Add a Paystack webhook as a second path to
 `paid` when you want payments to survive a closed browser tab.
+
+If you deploy somewhere other than Vercel, `npm run build && npm start` still works
+on any Node host. A purely static host is not enough because the API and generation
+run in Express.
 
 ## Structure
 
 ```
-server.js               API, auth middleware, Paystack verify, generation, static site
+server.js               Express app, local server, Vercel export, background jobs
+vercel.json             Vercel build, function duration, SPA fallback
 lib/
   auth.js               bearer-token middleware (verifies Supabase sessions)
-  supabase.js           server-only Postgres + Storage access (service role)
+  supabase.js           server-only Postgres + Storage + signed upload URLs
   extract.js            PDF / DOCX / TXT → cleaned text (60k char cap)
   study-pack.js         Gemini call, JSON schema, retry, result normalisation
 supabase/schema.sql     orders table, RLS, user_id index, private storage bucket
+static/                 source files copied into the Vite build (robots.txt)
 src/
   App.jsx               route switch, page titles, focus + scroll handling
   main.jsx              AuthProvider, legacy URL redirects
@@ -225,10 +249,13 @@ reference-legacy/        the original HTML/CSS/vanilla JS for comparison
 
 - The `orders` table has RLS enabled with no policies. Only the service role key
   can read or write it, which is why that key must stay on the server. The browser
-  uses the anon key only for Supabase Auth.
+  uses the anon key for Supabase Auth and for uploads authorized by short-lived
+  signed URLs.
 - Checkout requires an account. This is deliberate: the account is what makes
   purchased packs retrievable later.
-- Uploads are private; the app never exposes a public file URL.
+- Uploads are private; the app never exposes a public file URL. The browser sends
+  the file straight to Storage, then the API confirms the object exists before it
+  creates the order.
 - Scanned PDFs with no text layer return a clear "could not read enough text" error
   instead of an empty pack.
 - `npm run dev` starts both processes; `npm start` runs the API and serves the built

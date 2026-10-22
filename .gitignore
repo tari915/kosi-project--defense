@@ -1,9 +1,11 @@
 node_modules/
 dist/
+public/
 .env
 uploads/
 *.db
 tmp-test.pdf
 tmp-test.docx
 .DS_Store
+.vercel/
 supabase/.temp/

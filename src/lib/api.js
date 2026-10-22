@@ -1,4 +1,4 @@
-import { getAccessToken } from './authClient.js';
+import { getAccessToken, supabase } from './authClient.js';
 
 async function request(path, options = {}) {
     const token = await getAccessToken();
@@ -33,11 +33,51 @@ async function request(path, options = {}) {
     return data;
 }
 
-export function createOrder(file) {
-    const form = new FormData();
-    form.append('file', file);
+export async function createOrder(file) {
+    const ticket = await request('/api/uploads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: file.name,
+            size: file.size,
+            type: file.type || 'application/octet-stream'
+        })
+    });
 
-    return request('/api/orders', { method: 'POST', body: form });
+    if (!supabase) {
+        throw new Error('Accounts are not configured. Add the Supabase browser keys and try again.');
+    }
+
+    let uploadError = null;
+
+    try {
+        const result = await supabase.storage
+            .from(ticket.bucket)
+            .uploadToSignedUrl(ticket.path, ticket.token, file, {
+                contentType: file.type || 'application/octet-stream'
+            });
+        uploadError = result.error;
+    } catch (error) {
+        uploadError = error;
+    }
+
+    if (uploadError) {
+        const error = new Error(
+            'We could not upload your file. Check your connection and try again.'
+        );
+        error.status = 502;
+        throw error;
+    }
+
+    return request('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            id: ticket.id,
+            path: ticket.path,
+            originalName: file.name
+        })
+    });
 }
 
 export function verifyOrder(id) {
