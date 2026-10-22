@@ -12,6 +12,14 @@ const { waitUntil } = require('@vercel/functions');
 const PORT = process.env.PORT || 3100;
 const PRICE_KOBO = Number(process.env.PRICE_KOBO) || 100000; // 100000 kobo = ₦1,000
 const PRICE_LABEL = '₦' + (PRICE_KOBO / 100).toLocaleString('en-NG');
+const BROWSER_SUPABASE_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
+const BROWSER_SUPABASE_ANON_KEY = (
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    ''
+).trim();
 const MAX_FILE_MB = 10;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt'];
@@ -55,10 +63,18 @@ const app = express();
 app.use(express.json());
 
 app.get('/api/config', (req, res) => {
+    const supabaseUrl = /your-project/i.test(BROWSER_SUPABASE_URL) ? '' : BROWSER_SUPABASE_URL;
+    const supabaseAnonKey = /your-anon/i.test(BROWSER_SUPABASE_ANON_KEY)
+        ? ''
+        : BROWSER_SUPABASE_ANON_KEY;
+
+    res.set('Cache-Control', 'no-store');
     res.json({
         paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY,
         amount: PRICE_KOBO,
-        priceLabel: PRICE_LABEL
+        priceLabel: PRICE_LABEL,
+        supabaseUrl,
+        supabaseAnonKey
     });
 });
 

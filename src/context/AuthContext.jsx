@@ -1,52 +1,69 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { authConfigured, supabase } from '../lib/authClient.js';
+import { getSupabase } from '../lib/authClient.js';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(authConfigured);
+    const [loading, setLoading] = useState(true);
+    const [configured, setConfigured] = useState(false);
     const [authView, setAuthView] = useState(null);
     const [authNotice, setAuthNotice] = useState('');
 
     useEffect(() => {
-        if (!supabase) {
-            setLoading(false);
-            return undefined;
-        }
-
         let active = true;
+        let subscription = null;
 
-        supabase.auth
-            .getSession()
-            .then(({ data }) => {
+        getSupabase()
+            .then((client) => {
                 if (!active) return;
-                setUser((data.session && data.session.user) || null);
-                setLoading(false);
+
+                if (!client) {
+                    setConfigured(false);
+                    setLoading(false);
+                    return;
+                }
+
+                setConfigured(true);
+
+                client.auth
+                    .getSession()
+                    .then(({ data }) => {
+                        if (!active) return;
+                        setUser((data.session && data.session.user) || null);
+                        setLoading(false);
+                    })
+                    .catch(() => {
+                        if (active) setLoading(false);
+                    });
+
+                const { data: listener } = client.auth.onAuthStateChange((event, session) => {
+                    if (!active) return;
+
+                    setUser((session && session.user) || null);
+
+                    if (event === 'PASSWORD_RECOVERY') {
+                        setAuthNotice('Choose a new password for your account.');
+                        setAuthView('new-password');
+                    }
+
+                    if (event === 'SIGNED_OUT') {
+                        setAuthView(null);
+                        setAuthNotice('');
+                    }
+                });
+
+                subscription = listener.subscription;
             })
             .catch(() => {
-                if (active) setLoading(false);
+                if (!active) return;
+                setConfigured(false);
+                setLoading(false);
             });
-
-        const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-            if (!active) return;
-
-            setUser((session && session.user) || null);
-
-            if (event === 'PASSWORD_RECOVERY') {
-                setAuthNotice('Choose a new password for your account.');
-                setAuthView('new-password');
-            }
-
-            if (event === 'SIGNED_OUT') {
-                setAuthView(null);
-                setAuthNotice('');
-            }
-        });
 
         return () => {
             active = false;
-            listener.subscription.unsubscribe();
+            if (subscription) subscription.unsubscribe();
         };
     }, []);
 
@@ -61,8 +78,9 @@ export function AuthProvider({ children }) {
     }, []);
 
     const signOut = useCallback(async () => {
-        if (supabase) {
-            await supabase.auth.signOut().catch(() => {});
+        const client = await getSupabase();
+        if (client) {
+            await client.auth.signOut().catch(() => {});
         }
         setUser(null);
         setAuthView(null);
@@ -73,14 +91,14 @@ export function AuthProvider({ children }) {
         () => ({
             user,
             loading,
-            configured: authConfigured,
+            configured,
             authView,
             authNotice,
             openAuth,
             closeAuth,
             signOut
         }),
-        [user, loading, authView, authNotice, openAuth, closeAuth, signOut]
+        [user, loading, configured, authView, authNotice, openAuth, closeAuth, signOut]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

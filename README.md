@@ -99,9 +99,11 @@ PRICE_KOBO=100000
 `PRICE_KOBO` is the single source of truth for the price — the checkout card and the
 Paystack charge both read it. `100000` = ₦1,000.
 
-Vite only exposes variables prefixed with `VITE_` to the browser. If the
-`VITE_SUPABASE_*` values are missing, the app still runs but the sign-in dialog
-explains that accounts are not configured and checkout stays blocked.
+Vite exposes variables prefixed with `VITE_` at build time. The server also exposes
+the public Supabase URL and anon key through `/api/config`, so a deployment can
+provide them at runtime without embedding them in the browser bundle. If both
+sources are missing, the app still runs but sign-in is disabled and checkout stays
+blocked.
 
 ## Pages
 
@@ -172,8 +174,9 @@ and `vercel.json` handles the same SPA fallback.
 1. Import the repository at <https://vercel.com/new>. `vercel.json` selects the
    Express preset and the `npm run build` build command.
 2. Add every variable from `.env` in **Project Settings → Environment Variables**.
-   The two `VITE_SUPABASE_*` values must exist at **build** time; the rest are
-   server-side runtime values.
+   The public `VITE_SUPABASE_*` values are used at build time when present and are
+   also exposed through `/api/config` at runtime; the rest are server-side values.
+   Redeploy after changing environment variables.
 3. Set the Supabase **Site URL** and **Redirect URLs** to the Vercel production domain
    (and preview domains if you use them).
 4. Use live Paystack keys and add the Vercel domain to the Paystack dashboard.
@@ -244,8 +247,8 @@ reference-legacy/        the original HTML/CSS/vanilla JS for comparison
 - **An order turns `failed` right after payment:** `GEMINI_API_KEY` is missing or
   invalid. Check the server logs; the order keeps its upload so it can be retried.
 - **The auth dialog says sign-in is not set up:** add `VITE_SUPABASE_URL` and
-  `VITE_SUPABASE_ANON_KEY`, then restart Vite (the dev server must rebuild with the
-  new values).
+  `VITE_SUPABASE_ANON_KEY`. Locally, restart Vite; on Vercel, add them to the
+  Production environment and redeploy.
 
 ## Notes
 

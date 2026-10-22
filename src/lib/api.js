@@ -1,4 +1,4 @@
-import { getAccessToken, supabase } from './authClient.js';
+import { getAccessToken, getSupabase } from './authClient.js';
 
 async function request(path, options = {}) {
     const token = await getAccessToken();
@@ -44,14 +44,15 @@ export async function createOrder(file) {
         })
     });
 
-    if (!supabase) {
+    const client = await getSupabase();
+    if (!client) {
         throw new Error('Accounts are not configured. Add the Supabase browser keys and try again.');
     }
 
     let uploadError = null;
 
     try {
-        const result = await supabase.storage
+        const result = await client.storage
             .from(ticket.bucket)
             .uploadToSignedUrl(ticket.path, ticket.token, file, {
                 contentType: file.type || 'application/octet-stream'

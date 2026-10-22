@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { supabase } from '../lib/authClient.js';
+import { getSupabase } from '../lib/authClient.js';
 
 const COPY = {
     signin: {
@@ -58,7 +58,7 @@ function authErrorMessage(error) {
 }
 
 export default function AuthModal() {
-    const { configured, authView, authNotice, openAuth, closeAuth } = useAuth();
+    const { configured, loading, authView, authNotice, openAuth, closeAuth } = useAuth();
     const dialogRef = useRef(null);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -69,6 +69,10 @@ export default function AuthModal() {
 
     const mode = authView || 'signin';
     const copy = COPY[mode];
+    const configState = configured ? 'ready' : loading ? 'loading' : 'missing';
+    const configMessage = import.meta.env.DEV
+        ? 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env, then restart the dev server.'
+        : 'Sign-in is not configured for this deployment. Add the Supabase browser credentials in Vercel, then redeploy.';
 
     useEffect(() => {
         const dialog = dialogRef.current;
@@ -103,6 +107,12 @@ export default function AuthModal() {
         return () => window.clearTimeout(timer);
     }, [authView]);
 
+    async function getAuthClient() {
+        const client = await getSupabase();
+        if (!client) setError('Sign-in is not configured for this deployment.');
+        return client;
+    }
+
     async function handleSignIn(event) {
         event.preventDefault();
         setError('');
@@ -120,7 +130,13 @@ export default function AuthModal() {
         }
 
         setBusy(true);
-        const { error: authError } = await supabase.auth.signInWithPassword({
+        const client = await getAuthClient();
+        if (!client) {
+            setBusy(false);
+            return;
+        }
+
+        const { error: authError } = await client.auth.signInWithPassword({
             email: address,
             password
         });
@@ -155,7 +171,13 @@ export default function AuthModal() {
         }
 
         setBusy(true);
-        const { data, error: authError } = await supabase.auth.signUp({
+        const client = await getAuthClient();
+        if (!client) {
+            setBusy(false);
+            return;
+        }
+
+        const { data, error: authError } = await client.auth.signUp({
             email: address,
             password,
             options: { emailRedirectTo: window.location.origin + '/' }
@@ -188,7 +210,13 @@ export default function AuthModal() {
         }
 
         setBusy(true);
-        const { error: authError } = await supabase.auth.resetPasswordForEmail(address, {
+        const client = await getAuthClient();
+        if (!client) {
+            setBusy(false);
+            return;
+        }
+
+        const { error: authError } = await client.auth.resetPasswordForEmail(address, {
             redirectTo: window.location.origin + '/?reset=1'
         });
         setBusy(false);
@@ -216,7 +244,13 @@ export default function AuthModal() {
         }
 
         setBusy(true);
-        const { error: authError } = await supabase.auth.updateUser({ password });
+        const client = await getAuthClient();
+        if (!client) {
+            setBusy(false);
+            return;
+        }
+
+        const { error: authError } = await client.auth.updateUser({ password });
         setBusy(false);
 
         if (authError) {
@@ -453,11 +487,19 @@ export default function AuthModal() {
                 </button>
 
                 <p className="kicker">Account</p>
-                <h2 id="authTitle">{configured ? copy.title : 'Sign-in is not set up yet.'}</h2>
+                <h2 id="authTitle">
+                    {configState === 'ready'
+                        ? copy.title
+                        : configState === 'loading'
+                          ? 'Checking sign-in…'
+                          : 'Sign-in is not set up yet.'}
+                </h2>
                 <p className="auth-lede" id="authLede">
-                    {configured
+                    {configState === 'ready'
                         ? copy.lede
-                        : 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env, then restart the dev server.'}
+                        : configState === 'loading'
+                          ? 'One moment while we load your account settings.'
+                          : configMessage}
                 </p>
 
                 {configured && authNotice && (
@@ -476,13 +518,17 @@ export default function AuthModal() {
                     </p>
                 )}
 
-                {configured ? (
+                {configState === 'ready' ? (
                     <>
                         {renderForm()}
                         {renderSwitch()}
                     </>
                 ) : (
-                    <button className="btn btn--primary btn--wide auth-config-close" type="button" onClick={closeAuth}>
+                    <button
+                        className="btn btn--primary btn--wide auth-config-close"
+                        type="button"
+                        onClick={closeAuth}
+                    >
                         Close
                     </button>
                 )}
