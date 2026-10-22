@@ -41,7 +41,7 @@ export default function HelpPage() {
                         </div>
 
                         <div className="help-quick">
-                            <Link to="/" className="button primary">
+                            <Link to="/new" className="button primary">
                                 New pack
                                 <Icon name="plus" />
                             </Link>

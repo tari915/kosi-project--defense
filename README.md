@@ -4,13 +4,13 @@ Turn lecture notes into an exam study pack: a summary, flashcards and practice
 questions. Sign in → upload → pay with Paystack → Gemini builds the pack → reopen it
 any time from your library.
 
-The product is a small multi-page app. `/` is the working study workspace, not a
-marketing landing page; the about page lives at `/welcome`.
+The product is a small multi-page app. `/` is the public welcome/landing page;
+the working study workspace lives at `/new`.
 
 ## Stack
 
 - **Frontend:** React 19 + Vite, with a small client-side router for the product
-  pages (`/`, `/dashboard`, `/pack/:id`, `/sample`, `/account`, `/welcome`, `/help`)
+  pages (`/`, `/new`, `/dashboard`, `/pack/:id`, `/sample`, `/account`, `/welcome`, `/help`)
 - **Backend:** Express on Vercel Functions, Paystack verify, Supabase Postgres +
   private Storage, Google Gemini for generation
 - **Uploads:** the browser uploads directly to Supabase Storage with a short-lived
@@ -107,17 +107,19 @@ explains that accounts are not configured and checkout stays blocked.
 
 | Route | What it does |
 | --- | --- |
-| `/` | Workspace: choose a file, sign in at checkout, pay, and start generation. Shows recent packs and a sample link. |
+| `/` | Welcome/landing page: the problem, the method and the offer. Primary calls to action open `/new` or `/sample`. |
+| `/new` | Workspace: choose a file, sign in at checkout, pay, and start generation. Shows recent packs and a sample link. |
 | `/dashboard` | The signed-in library. Lists every pack with status, date, reference and amount; active packs update automatically. |
 | `/pack/:id` | Private pack page. Handles signed-out, loading, pending, processing, failed and missing states, then opens the summary / flashcards / practice workspace. |
 | `/sample` | A complete example pack, available without an account. |
 | `/account` | Identity, member-since date, password-reset link, quick links and sign out. |
-| `/welcome` | About StudyFlow: the problem, the method and the offer. |
+| `/welcome` | Legacy alias for the welcome/landing page; primary navigation uses `/`. |
 | `/help` | FAQ, common fixes and links to the sample and account. |
 | anything else | A styled 404 that keeps the user inside the app. |
 
 Legacy links are redirected in `src/main.jsx`: `/?order=<id>` opens `/pack/<id>`,
-`#study/sample` opens `/sample`, and `#study/result` opens `/dashboard`.
+`#upload` opens `/new`, `#study/sample` opens `/sample`, and `#study/result` opens
+`/dashboard`.
 
 ## How an order flows
 
@@ -210,7 +212,7 @@ src/
     PackPage.jsx        private pack states and polling
     SamplePage.jsx      sample StudyWorkspace
     AccountPage.jsx     signed-in and guest account views
-    WelcomePage.jsx     about page
+    WelcomePage.jsx     landing page
     HelpPage.jsx        FAQ page
     NotFoundPage.jsx    404
   components/

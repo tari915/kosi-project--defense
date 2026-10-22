@@ -116,7 +116,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="library-head-actions">
-                            <Link to="/" className="button primary">
+                            <Link to="/new" className="button primary">
                                 New pack
                                 <Icon name="plus" />
                             </Link>
@@ -244,7 +244,7 @@ export default function DashboardPage() {
                                     when it is ready.
                                 </p>
                                 <div className="library-panel-actions">
-                                    <Link to="/" className="button primary">
+                                    <Link to="/new" className="button primary">
                                         Create a study pack
                                         <Icon name="arrow" />
                                     </Link>
@@ -345,7 +345,7 @@ export default function DashboardPage() {
                                                 {(isPending || isFailed) && (
                                                     <>
                                                         <Link
-                                                            to="/"
+                                                            to="/new"
                                                             className="button secondary"
                                                         >
                                                             Start a new pack

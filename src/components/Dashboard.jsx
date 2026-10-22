@@ -175,7 +175,7 @@ export default function Dashboard() {
                     Upload your lecture notes and your first study pack will land here.
                 </p>
                 <div className="dashboard-panel-actions">
-                    <a className="btn btn--accent" href="/#upload">
+                    <a className="btn btn--accent" href="/new">
                         Create a study pack
                         <span className="btn-arrow" aria-hidden="true">
                             ↘

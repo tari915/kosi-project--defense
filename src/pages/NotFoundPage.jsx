@@ -20,7 +20,7 @@ export default function NotFoundPage() {
                             still where you left them.
                         </p>
                         <div className="notfound-actions">
-                            <Link to="/" className="button primary">
+                            <Link to="/new" className="button primary">
                                 Go to workspace
                                 <Icon name="arrow" />
                             </Link>

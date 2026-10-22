@@ -79,7 +79,9 @@ export function useRoute() {
     const path = normalizePath(rawPath);
     const base = { path, search, key: location };
 
-    if (path === '/') return { ...base, name: 'workspace' };
+    // `/` is the public welcome page; `/new` is the working workspace.
+    if (path === '/') return { ...base, name: 'welcome' };
+    if (path === '/new') return { ...base, name: 'workspace' };
     if (path === '/dashboard') return { ...base, name: 'dashboard' };
     if (path === '/sample') return { ...base, name: 'sample' };
     if (path === '/account') return { ...base, name: 'account' };

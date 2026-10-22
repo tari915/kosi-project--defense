@@ -167,7 +167,7 @@ export default function PackPage({ id }) {
                                 Sign in
                                 <Icon name="arrow" />
                             </button>
-                            <Link to="/" className="button secondary">
+                            <Link to="/new" className="button secondary">
                                 Back to workspace
                             </Link>
                         </>
@@ -227,7 +227,7 @@ export default function PackPage({ id }) {
                                 Open my packs
                                 <Icon name="arrow" />
                             </Link>
-                            <Link to="/" className="button secondary">
+                            <Link to="/new" className="button secondary">
                                 Create a new pack
                             </Link>
                         </>
@@ -312,7 +312,7 @@ export default function PackPage({ id }) {
                     tone="pending"
                     actions={
                         <>
-                            <Link to="/" className="button primary">
+                            <Link to="/new" className="button primary">
                                 Start a new pack
                                 <Icon name="arrow" />
                             </Link>
@@ -359,7 +359,7 @@ export default function PackPage({ id }) {
                     tone="failed"
                     actions={
                         <>
-                            <Link to="/" className="button primary">
+                            <Link to="/new" className="button primary">
                                 Start a new pack
                                 <Icon name="arrow" />
                             </Link>
@@ -456,7 +456,7 @@ export default function PackPage({ id }) {
                     meta={`Generated ${formatDate(order.paid_at || order.created_at)}. Read it, recall it, then check what stuck.`}
                     backLabel="Back to my packs"
                     onBack={() => navigate('/dashboard')}
-                    onNew={() => navigate('/')}
+                    onNew={() => navigate('/new')}
                 />
             </AppShell>
         );

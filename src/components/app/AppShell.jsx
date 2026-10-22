@@ -5,14 +5,14 @@ import Icon from '../Icon.jsx';
 import Logo from '../Logo.jsx';
 
 const primaryLinks = [
-    { to: '/', label: 'New pack', match: ['workspace'] },
+    { to: '/new', label: 'New pack', match: ['workspace'] },
     { to: '/dashboard', label: 'My packs', match: ['dashboard', 'pack'] },
     { to: '/sample', label: 'Sample', match: ['sample'] },
-    { to: '/welcome', label: 'About', match: ['welcome'] }
+    { to: '/', label: 'About', match: ['welcome'] }
 ];
 
 const mobileLinks = [
-    { to: '/', label: 'New pack', icon: 'plus', match: ['workspace'] },
+    { to: '/new', label: 'New pack', icon: 'plus', match: ['workspace'] },
     { to: '/dashboard', label: 'My packs', icon: 'cards', match: ['dashboard', 'pack'] },
     { to: '/sample', label: 'Sample', icon: 'book', match: ['sample'] },
     { to: '/account', label: 'Account', icon: 'user', match: ['account'] }
@@ -57,7 +57,7 @@ export default function AppShell({ children }) {
 
             <header className="app-header">
                 <div className="app-header-inner container">
-                    <Link to="/" className="app-brand" aria-label="StudyFlow workspace">
+                    <Link to="/" className="app-brand" aria-label="StudyFlow home">
                         <Logo />
                     </Link>
 
@@ -146,19 +146,19 @@ export default function AppShell({ children }) {
                 <div className="app-footer-inner container">
                     <div className="app-footer-main">
                         <div>
-                            <Link to="/" className="app-brand" aria-label="StudyFlow workspace">
+                            <Link to="/" className="app-brand" aria-label="StudyFlow home">
                                 <Logo />
                             </Link>
                             <p>Your notes in. A clearer way to revise.</p>
                         </div>
 
                         <nav className="app-footer-links" aria-label="Footer navigation">
-                            <Link to="/">New pack</Link>
+                            <Link to="/new">New pack</Link>
                             <Link to="/dashboard">My packs</Link>
                             <Link to="/sample">Sample</Link>
                             <Link to="/account">Account</Link>
                             <Link to="/help">Help</Link>
-                            <Link to="/welcome">About</Link>
+                            <Link to="/">About</Link>
                         </nav>
                     </div>
 

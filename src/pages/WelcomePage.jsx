@@ -67,7 +67,7 @@ export default function WelcomePage() {
                             <br className="desktop-break" /> together in one focused study pack.
                         </p>
                         <div className="hero-actions od-cluster">
-                            <Link to="/" className="button primary large">
+                            <Link to="/new" className="button primary large">
                                 Create a study pack
                                 <Icon name="arrow" />
                             </Link>
@@ -197,7 +197,7 @@ export default function WelcomePage() {
                         </p>
                     </div>
                     <div className="welcome-cta-actions">
-                        <Link to="/" className="button primary large">
+                        <Link to="/new" className="button primary large">
                             Create a study pack
                             <Icon name="arrow" />
                         </Link>

@@ -202,7 +202,7 @@ export default function AccountPage() {
 
                             <section className="account-card account-shortcuts">
                                 <h2>Quick links</h2>
-                                <Link to="/">
+                                <Link to="/new">
                                     <span>
                                         <Icon name="plus" />
                                         New study pack

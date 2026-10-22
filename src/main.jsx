@@ -21,6 +21,8 @@ const legacyOrder = url.searchParams.get('order');
 
 if (legacyOrder) {
     window.history.replaceState(null, '', '/pack/' + encodeURIComponent(legacyOrder));
+} else if (url.hash === '#upload') {
+    window.history.replaceState(null, '', '/new');
 } else if (url.hash === '#study/sample') {
     window.history.replaceState(null, '', '/sample');
 } else if (url.hash === '#study/result') {

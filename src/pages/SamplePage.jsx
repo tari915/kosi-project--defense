@@ -13,8 +13,8 @@ export default function SamplePage() {
                 title={samplePack.title}
                 meta="An example pack. Read the summary, reveal the flashcards, then try the questions."
                 backLabel="Back to workspace"
-                onBack={() => navigate('/')}
-                onNew={() => navigate('/')}
+                onBack={() => navigate('/new')}
+                onNew={() => navigate('/new')}
             />
         </AppShell>
     );

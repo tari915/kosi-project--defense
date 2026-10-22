@@ -16,7 +16,7 @@ const TITLES = {
     dashboard: 'Your packs · StudyFlow',
     sample: 'Cell biology sample · StudyFlow',
     account: 'Account · StudyFlow',
-    welcome: 'About StudyFlow · Your notes. A clearer way to revise.',
+    welcome: 'StudyFlow · Your notes. A clearer way to revise.',
     help: 'Help & FAQ · StudyFlow',
     pack: 'Study pack · StudyFlow',
     'not-found': 'Page not found · StudyFlow'
