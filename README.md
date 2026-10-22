@@ -133,7 +133,7 @@ Legacy links are redirected in `src/main.jsx`: `/?order=<id>` opens `/pack/<id>`
 5. `POST /api/orders/:id/verify` checks ownership and the transaction with Paystack's
    API. Only a successful `pending → paid` update starts the job, so a double verify
    cannot run twice.
-6. The server downloads the file, extracts text (pdf-parse / mammoth / UTF-8), sends
+6. The server downloads the file, extracts text (unpdf / mammoth / UTF-8), sends
    it to Gemini, and saves the JSON result as `ready`. On Vercel this work is kept
    alive with `waitUntil`; locally it runs in the background process.
 7. The source upload is deleted after a successful generation. Failed jobs keep

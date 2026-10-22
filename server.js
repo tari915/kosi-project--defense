@@ -6,7 +6,6 @@ const fs = require('fs');
 const crypto = require('crypto');
 const supabase = require('./lib/supabase.js');
 const { requireUser } = require('./lib/auth.js');
-const { extractText } = require('./lib/extract.js');
 const { generateStudyPack } = require('./lib/study-pack.js');
 const { waitUntil } = require('@vercel/functions');
 
@@ -318,6 +317,8 @@ async function processOrder(orderId) {
         if (!order) throw new Error('Order disappeared before processing.');
 
         const file = await supabase.downloadObject(order.storage_path);
+        // Loaded here so a parser problem can never take down the whole API.
+        const { extractText } = require('./lib/extract.js');
         const text = await extractText(file, order.original_name);
         const result = await generateStudyPack(text, order.original_name);
 
