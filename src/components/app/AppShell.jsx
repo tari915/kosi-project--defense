@@ -150,6 +150,13 @@ export default function AppShell({ children }) {
                                 <Logo />
                             </Link>
                             <p>Your notes in. A clearer way to revise.</p>
+                            <p className="app-footer-contact">
+                                Contact us:{' '}
+                                <a href="mailto:studyflownigeria.help@gmail.com">
+                                    studyflownigeria.help@gmail.com
+                                </a>{' '}
+                                - we reply within 24h
+                            </p>
                         </div>
 
                         <nav className="app-footer-links" aria-label="Footer navigation">
