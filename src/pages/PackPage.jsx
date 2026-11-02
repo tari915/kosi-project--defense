@@ -175,7 +175,7 @@ export default function PackPage({ id }) {
                 >
                     <p>
                         Study packs are private to the account that created them. Sign in with the
-                        same email you used at checkout.
+                        same email you used to create this pack.
                     </p>
                 </PackState>
             </AppShell>
@@ -303,10 +303,10 @@ export default function PackPage({ id }) {
             <AppShell>
                 <PackState
                     icon="clock"
-                    eyebrow="Awaiting payment"
+                    eyebrow="Not completed"
                     title={
                         <>
-                            This pack is waiting on <em>payment.</em>
+                            This pack was not <em>completed.</em>
                         </>
                     }
                     tone="pending"
@@ -323,8 +323,9 @@ export default function PackPage({ id }) {
                     }
                 >
                     <p>
-                        Payment was not completed, so this pack was not generated. You were not
-                        charged. Start a new pack whenever you are ready to try again.
+                        This is an older pack whose payment was not completed, so it was never
+                        generated. Start a new pack whenever you are ready — your free plan
+                        includes one.
                     </p>
                     <dl className="pack-state-meta">
                         <div>
@@ -336,8 +337,14 @@ export default function PackPage({ id }) {
                             <dd>{order.reference}</dd>
                         </div>
                         <div>
-                            <dt>Price</dt>
-                            <dd>{formatMoney(order.amount)}</dd>
+                            <dt>{order.plan === 'legacy' ? 'Price' : 'Plan'}</dt>
+                            <dd>
+                                {order.plan === 'legacy'
+                                    ? formatMoney(order.amount)
+                                    : order.plan === 'premium'
+                                      ? 'Premium'
+                                      : 'Free'}
+                            </dd>
                         </div>
                     </dl>
                 </PackState>
@@ -370,8 +377,8 @@ export default function PackPage({ id }) {
                     }
                 >
                     <p>
-                        Payment was confirmed, but generation did not complete. Keep the
-                        reference below if you need to follow this up.
+                        This upload counted against your plan, but generation did not complete.
+                        Keep the reference below if you need to follow this up with support.
                     </p>
                     <dl className="pack-state-meta">
                         <div>
@@ -383,8 +390,14 @@ export default function PackPage({ id }) {
                             <dd>{order.reference}</dd>
                         </div>
                         <div>
-                            <dt>Price</dt>
-                            <dd>{formatMoney(order.amount)}</dd>
+                            <dt>{order.plan === 'legacy' ? 'Price' : 'Plan'}</dt>
+                            <dd>
+                                {order.plan === 'legacy'
+                                    ? formatMoney(order.amount)
+                                    : order.plan === 'premium'
+                                      ? 'Premium'
+                                      : 'Free'}
+                            </dd>
                         </div>
                     </dl>
                 </PackState>
@@ -423,7 +436,7 @@ export default function PackPage({ id }) {
                     <p>
                         {slow
                             ? 'This is taking a little longer than usual. You can leave this page open, or come back to your library later.'
-                            : 'Payment is confirmed. We are reading your notes and putting your summary, flashcards and questions together.'}
+                            : 'We are reading your notes and putting your study pack together.'}
                     </p>
                     {!slow && (
                         <div className="pack-building" role="status">
@@ -453,7 +466,13 @@ export default function PackPage({ id }) {
                     pack={order.result}
                     filename={order.original_name}
                     title={fileTitle(order.original_name)}
-                    meta={`Generated ${formatDate(order.paid_at || order.created_at)}. Read it, recall it, then check what stuck.`}
+                    meta={`${
+                        order.plan === 'premium'
+                            ? 'Premium'
+                            : order.plan === 'free'
+                              ? 'Free'
+                              : 'Study'
+                    } pack generated ${formatDate(order.created_at)}. Read it, recall it, then check what stuck.`}
                     backLabel="Back to my packs"
                     onBack={() => navigate('/dashboard')}
                     onNew={() => navigate('/new')}

@@ -5,11 +5,11 @@ import { getSupabase } from '../lib/authClient.js';
 const COPY = {
     signin: {
         title: 'Welcome back.',
-        lede: 'Sign in to buy a pack and reopen your library.'
+        lede: 'Sign in to create a study pack and reopen your library.'
     },
     signup: {
         title: 'Create your account.',
-        lede: 'One account keeps every pack in one place.'
+        lede: 'Start with one free study pack. Upgrade to Premium whenever you need more.'
     },
     reset: {
         title: 'Reset your password.',
@@ -341,6 +341,10 @@ export default function AuthModal() {
                             onChange={(event) => setConfirm(event.target.value)}
                         />
                     </label>
+
+                    <p className="auth-plan-note">
+                        Free includes 1 upload and 5 practice questions. No card needed.
+                    </p>
 
                     <button className="btn btn--accent btn--wide" type="submit" disabled={busy}>
                         {busy ? 'Creating account…' : 'Create account'}

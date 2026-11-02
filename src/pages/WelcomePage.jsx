@@ -11,8 +11,8 @@ const steps = [
         icon: 'up'
     },
     {
-        title: 'Make it a study pack',
-        text: 'Review the price and continue through Paystack. One pack, one payment.',
+        title: 'Start free, or go Premium',
+        text: 'Your first pack is free. Premium unlocks 10 uploads over 30 days for busier weeks.',
         icon: 'cards'
     },
     {
@@ -25,22 +25,38 @@ const steps = [
 const features = [
     {
         title: 'Find the big picture',
-        text: 'A focused summary brings the main ideas together, so you know where to begin.',
+        text: 'A focused summary brings the main ideas together, so you know where to begin. Premium adds detailed revision notes.',
         name: 'Summary',
         icon: 'file'
     },
     {
         title: 'Bring it back to mind',
-        text: 'Question on one side. Answer on the other. A simple space to practise active recall.',
+        text: 'Question on one side. Answer on the other. A simple space to practise active recall, included with Premium.',
         name: 'Flashcards',
         icon: 'cards'
     },
     {
         title: 'See what you know',
-        text: 'Work through multiple-choice questions, check your answers, and revisit what needs attention.',
+        text: 'Five practice questions on Free, or twelve with explanations on Premium. Check your answers and revisit what needs attention.',
         name: 'Practice',
         icon: 'quiz'
     }
+];
+
+const freePlan = [
+    '1 document upload',
+    '1 full study pack',
+    'Focused summary',
+    '5 practice questions',
+    'Saved in your library'
+];
+
+const premiumPlan = [
+    '10 document uploads per 30 days',
+    'Detailed summaries and revision notes',
+    '8–12 flashcards per pack',
+    '12 practice questions with explanations',
+    'Existing packs stay available'
 ];
 
 export default function WelcomePage() {
@@ -65,10 +81,11 @@ export default function WelcomePage() {
                             <br className="desktop-break" /> Summaries, flashcards, and practice
                             questions,
                             <br className="desktop-break" /> together in one focused study pack.
+                            Start with one free.
                         </p>
                         <div className="hero-actions od-cluster">
                             <Link to="/new" className="button primary large">
-                                Create a study pack
+                                Create a free pack
                                 <Icon name="arrow" />
                             </Link>
                             <Link to="/sample" className="text-link">
@@ -79,11 +96,11 @@ export default function WelcomePage() {
                         <div className="hero-facts od-cluster">
                             <span>
                                 <Icon name="check" />
-                                No subscription
+                                Free plan to start
                             </span>
                             <span>
                                 <Icon name="check" />
-                                Saved to your account
+                                ₦5,000 / 30 days for Premium
                             </span>
                         </div>
                     </div>
@@ -185,6 +202,75 @@ export default function WelcomePage() {
                     </div>
                 </section>
 
+                <section className="pricing-section container" id="pricing">
+                    <div className="section-heading pricing-heading">
+                        <h2>
+                            Start free.
+                            <br />
+                            Upgrade when you need more.
+                        </h2>
+                        <p>
+                            One account. Your packs stay in your library whether you are on Free
+                            or Premium.
+                        </p>
+                    </div>
+
+                    <div className="pricing-grid">
+                        <article className="price-card">
+                            <div className="price-card-head">
+                                <span className="price-name">Free</span>
+                            </div>
+                            <p className="price-amount">
+                                ₦0<span>to start</span>
+                            </p>
+                            <p className="price-lede">
+                                A full first pack, so you can see how StudyFlow fits your
+                                revision.
+                            </p>
+                            <ul className="price-list">
+                                {freePlan.map((item) => (
+                                    <li key={item}>
+                                        <Icon name="check" />
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                            <Link to="/new" className="button secondary wide">
+                                Create a free pack
+                            </Link>
+                            <p className="price-foot">No card needed.</p>
+                        </article>
+
+                        <article className="price-card price-card--premium">
+                            <span className="price-flag">Best for exam season</span>
+                            <div className="price-card-head">
+                                <span className="price-name">Premium</span>
+                            </div>
+                            <p className="price-amount">
+                                ₦5,000<span>/ 30 days</span>
+                            </p>
+                            <p className="price-lede">
+                                For the weeks when you have more than one course to carry.
+                            </p>
+                            <ul className="price-list">
+                                {premiumPlan.map((item) => (
+                                    <li key={item}>
+                                        <Icon name="check" />
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                            <Link to="/account" className="button primary wide">
+                                Get Premium
+                                <Icon name="arrow" />
+                            </Link>
+                            <p className="price-foot">
+                                One payment. 30 days. No per-pack charges.
+                            </p>
+                        </article>
+                    </div>
+                </section>
+
                 <section className="welcome-cta container">
                     <div className="welcome-cta-copy">
                         <p className="app-kicker">Start here</p>
@@ -192,13 +278,13 @@ export default function WelcomePage() {
                             One document. <em>A clearer place to begin.</em>
                         </h2>
                         <p>
-                            Bring the notes you already have. Leave with a summary, a set of
-                            flashcards and questions you can actually use.
+                            Your first pack is free. Bring the notes you already have and leave
+                            with a summary, flashcards and questions you can use.
                         </p>
                     </div>
                     <div className="welcome-cta-actions">
                         <Link to="/new" className="button primary large">
-                            Create a study pack
+                            Create a free pack
                             <Icon name="arrow" />
                         </Link>
                         <Link to="/sample" className="button secondary large">

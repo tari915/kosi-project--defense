@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import AppShell from '../components/app/AppShell.jsx';
 import Icon from '../components/Icon.jsx';
+import { PlanBadge } from '../components/PlanStatus.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useSubscription } from '../hooks/useSubscription.js';
 import { fetchMyOrders } from '../lib/api.js';
 import {
     STATUS_LABELS,
@@ -39,6 +41,7 @@ function LibrarySkeleton() {
 
 export default function DashboardPage() {
     const { user, loading: authLoading, openAuth } = useAuth();
+    const plan = useSubscription();
     const userId = user?.id || null;
     const [orders, setOrders] = useState([]);
     const [state, setState] = useState('loading');
@@ -110,8 +113,9 @@ export default function DashboardPage() {
                                 Every pack, <em>ready to reopen.</em>
                             </h1>
                             <p className="app-page-lede">
-                                Your study packs stay here. Come back before a test, a tutorial
-                                or a quiet revision session and pick up where you left off.
+                                Your study packs stay here, whatever plan you're on. Come back
+                                before a test, a tutorial or a quiet revision session and pick up
+                                where you left off.
                             </p>
                         </div>
 
@@ -133,6 +137,32 @@ export default function DashboardPage() {
                             )}
                         </div>
                     </header>
+
+                    {!signedOut && (
+                        <div className="library-plan-strip">
+                            <div className="library-plan-main">
+                                <PlanBadge
+                                    subscription={plan.subscription}
+                                    loading={plan.loading}
+                                />
+                                <span>
+                                    {plan.subscription
+                                        ? plan.subscription.plan === 'premium'
+                                            ? `${plan.subscription.remaining} of ${plan.subscription.uploadLimit} uploads left · until ${formatDate(plan.subscription.premiumUntil)}`
+                                            : plan.subscription.remaining > 0
+                                              ? '1 free pack included'
+                                              : 'Free pack used'
+                                        : plan.loading
+                                          ? 'Checking your plan…'
+                                          : 'Plan unavailable'}
+                                </span>
+                            </div>
+                            <Link to="/account" className="text-link">
+                                Manage plan
+                                <Icon name="arrow" />
+                            </Link>
+                        </div>
+                    )}
 
                     {signedOut && (
                         <section className="library-panel library-panel--signed-out">
@@ -238,14 +268,14 @@ export default function DashboardPage() {
                             </div>
                             <div>
                                 <p className="app-kicker">A clean start</p>
-                                <h2>Your library starts with one document.</h2>
+                                <h2>Your first pack is free.</h2>
                                 <p>
                                     Upload your notes and your first study pack will appear here
-                                    when it is ready.
+                                    when it is ready. No card needed.
                                 </p>
                                 <div className="library-panel-actions">
                                     <Link to="/new" className="button primary">
-                                        Create a study pack
+                                        Create a free pack
                                         <Icon name="arrow" />
                                     </Link>
                                     <Link to="/sample" className="button secondary">
@@ -319,8 +349,16 @@ export default function DashboardPage() {
                                                     </dd>
                                                 </div>
                                                 <div>
-                                                    <dt>Price</dt>
-                                                    <dd>{formatMoney(order.amount)}</dd>
+                                                    <dt>
+                                                        {order.plan === 'legacy' ? 'Paid' : 'Plan'}
+                                                    </dt>
+                                                    <dd>
+                                                        {order.plan === 'legacy'
+                                                            ? formatMoney(order.amount)
+                                                            : order.plan === 'premium'
+                                                              ? 'Premium'
+                                                              : 'Free'}
+                                                    </dd>
                                                 </div>
                                             </dl>
 

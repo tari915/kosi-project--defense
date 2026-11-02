@@ -27,6 +27,7 @@ async function request(path, options = {}) {
     if (!response.ok) {
         const error = new Error(data.error || 'Something went wrong. Please try again.');
         error.status = response.status;
+        error.data = data;
         throw error;
     }
 
@@ -81,14 +82,22 @@ export async function createOrder(file) {
     });
 }
 
-export function verifyOrder(id) {
-    return request('/api/orders/' + encodeURIComponent(id) + '/verify', { method: 'POST' });
-}
-
 export function fetchOrder(id) {
     return request('/api/orders/' + encodeURIComponent(id));
 }
 
 export function fetchMyOrders() {
     return request('/api/me/orders');
+}
+
+export function fetchSubscription() {
+    return request('/api/me/subscription');
+}
+
+export function createSubscription() {
+    return request('/api/subscriptions', { method: 'POST' });
+}
+
+export function verifySubscription(id) {
+    return request('/api/subscriptions/' + encodeURIComponent(id) + '/verify', { method: 'POST' });
 }

@@ -5,16 +5,20 @@ import { Link } from '../lib/router.jsx';
 
 const fixes = [
     {
-        title: 'The payment window did not open',
-        text: 'Check that your browser is not blocking pop-ups for StudyFlow, then try again. Your file is not charged until payment is completed.'
+        title: 'The upgrade window did not open',
+        text: 'Check that your browser is not blocking pop-ups for StudyFlow, then try again. You are not charged until the payment is completed.'
     },
     {
-        title: 'I paid but my pack is not in my library',
-        text: 'Sign in with the same email you used at checkout and refresh your library. If it still is not there, keep the reference shown on the order.'
+        title: 'I paid but Premium is not active',
+        text: 'Open your account and refresh the plan card. If it still shows Free, keep the Paystack reference and contact support so we can check the payment.'
     },
     {
         title: 'My pack is still being prepared',
-        text: 'Most packs finish in under a minute. The library updates automatically while an order is being built.'
+        text: 'Most packs finish in under a minute. The library updates automatically while a pack is being built.'
+    },
+    {
+        title: 'I have used all my uploads',
+        text: 'On Free, upgrade to Premium for 10 more uploads. On Premium, your allowance resets when you renew after the current 30-day period ends. Existing packs stay in your library.'
     },
     {
         title: 'My file will not upload',
@@ -34,9 +38,9 @@ export default function HelpPage() {
                                 A little help, <em>right here.</em>
                             </h1>
                             <p className="app-page-lede">
-                                Straight answers about uploads, payment and the packs in your
+                                Straight answers about plans, uploads and the packs in your
                                 library. If something still looks wrong, the reference on your
-                                order is the best place to start.
+                                pack is the best place to start.
                             </p>
                         </div>
 
@@ -103,10 +107,11 @@ export default function HelpPage() {
                             </section>
 
                             <section className="side-card">
-                                <h2>Account & orders</h2>
+                                <h2>Plan & billing</h2>
                                 <p>
-                                    Your order reference and payment status live in your library.
-                                    Sign in with the email you used at checkout to reopen a pack.
+                                    Your plan, uploads used and Premium end date live on your
+                                    account page. You can upgrade from there or from the
+                                    workspace.
                                 </p>
                                 <Link to="/account" className="text-link">
                                     Open account

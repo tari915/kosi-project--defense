@@ -7,10 +7,17 @@ const crypto = require('crypto');
 const supabase = require('./lib/supabase.js');
 const { requireUser } = require('./lib/auth.js');
 const { generateStudyPack } = require('./lib/study-pack.js');
+const {
+    getEntitlement,
+    limitMessage,
+    FREE_UPLOAD_LIMIT,
+    PREMIUM_UPLOAD_LIMIT,
+    PREMIUM_DAYS
+} = require('./lib/entitlements.js');
 const { waitUntil } = require('@vercel/functions');
 
 const PORT = process.env.PORT || 3100;
-const PRICE_KOBO = Number(process.env.PRICE_KOBO) || 100000; // 100000 kobo = ₦1,000
+const PRICE_KOBO = Number(process.env.PRICE_KOBO) || 500000; // 500000 kobo = ₦5,000 / 30 days
 const PRICE_LABEL = '₦' + (PRICE_KOBO / 100).toLocaleString('en-NG');
 const BROWSER_SUPABASE_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '')
     .trim()
@@ -70,9 +77,14 @@ app.get('/api/config', (req, res) => {
 
     res.set('Cache-Control', 'no-store');
     res.json({
-        paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY,
+        paystackPublicKey: looksLikePlaceholder(process.env.PAYSTACK_PUBLIC_KEY)
+            ? ''
+            : process.env.PAYSTACK_PUBLIC_KEY,
         amount: PRICE_KOBO,
         priceLabel: PRICE_LABEL,
+        premiumDays: PREMIUM_DAYS,
+        freeUploadLimit: FREE_UPLOAD_LIMIT,
+        premiumUploadLimit: PREMIUM_UPLOAD_LIMIT,
         supabaseUrl,
         supabaseAnonKey
     });
@@ -100,6 +112,23 @@ app.post('/api/uploads', requireUser, async (req, res) => {
     if (size > MAX_FILE_BYTES) {
         return res.status(400).json({
             error: 'That file is larger than ' + MAX_FILE_MB + 'MB.'
+        });
+    }
+
+    let entitlement;
+
+    try {
+        entitlement = await getEntitlement(req.user.id);
+    } catch (error) {
+        console.error('Could not check plan:', error);
+        return res.status(503).json({ error: 'We could not check your plan. Try again in a moment.' });
+    }
+
+    if (!entitlement.canGenerate) {
+        return res.status(402).json({
+            error: limitMessage(entitlement),
+            code: 'LIMIT_REACHED',
+            subscription: entitlement
         });
     }
 
@@ -173,6 +202,25 @@ app.post('/api/orders', requireUser, async (req, res) => {
         });
     }
 
+    let entitlement;
+
+    try {
+        entitlement = await getEntitlement(req.user.id);
+    } catch (error) {
+        console.error('Could not check plan:', error);
+        await supabase.removeObject(storagePath).catch(() => {});
+        return res.status(503).json({ error: 'We could not check your plan. Try again in a moment.' });
+    }
+
+    if (!entitlement.canGenerate) {
+        await supabase.removeObject(storagePath).catch(() => {});
+        return res.status(402).json({
+            error: limitMessage(entitlement),
+            code: 'LIMIT_REACHED',
+            subscription: entitlement
+        });
+    }
+
     const order = {
         id,
         user_id: req.user.id,
@@ -180,7 +228,9 @@ app.post('/api/orders', requireUser, async (req, res) => {
         original_name: originalName,
         storage_path: storagePath,
         reference: 'SF-' + crypto.randomBytes(8).toString('hex'),
-        amount: PRICE_KOBO
+        amount: 0,
+        plan: entitlement.plan,
+        status: 'processing'
     };
 
     try {
@@ -195,7 +245,8 @@ app.post('/api/orders', requireUser, async (req, res) => {
             return res.json({
                 id: existing.id,
                 reference: existing.reference,
-                amount: existing.amount
+                status: existing.status,
+                plan: existing.plan
             });
         }
 
@@ -207,36 +258,112 @@ app.post('/api/orders', requireUser, async (req, res) => {
         return res.status(502).json({ error: 'We could not save your upload. Please try again.' });
     }
 
-    res.json({ id: order.id, reference: order.reference, amount: order.amount });
+    startProcessing(order.id);
+
+    res.json({
+        id: order.id,
+        reference: order.reference,
+        status: order.status,
+        plan: order.plan
+    });
 });
 
-// 2. Verify payment with Paystack (never trust the browser's "success")
-app.post('/api/orders/:id/verify', requireUser, async (req, res) => {
-    let order;
-
-    try {
-        order = await supabase.getOrderForUser(req.params.id, req.user.id);
-    } catch (error) {
-        console.error('Could not load order:', error);
-        return res.status(503).json({ error: 'We could not load this order. Try again in a moment.' });
+/* ============================================================
+   PREMIUM SUBSCRIPTION
+   One Paystack payment unlocks 30 days and 10 uploads.
+   ============================================================ */
+app.post('/api/subscriptions', requireUser, async (req, res) => {
+    if (!req.user.email) {
+        return res.status(400).json({ error: 'Your account has no email address.' });
     }
 
-    if (!order) return res.status(404).json({ error: 'Order not found.' });
+    if (
+        looksLikePlaceholder(process.env.PAYSTACK_SECRET_KEY) ||
+        looksLikePlaceholder(process.env.PAYSTACK_PUBLIC_KEY)
+    ) {
+        return res.status(503).json({ error: 'Upgrades are not configured yet. Try again later.' });
+    }
 
-    if (order.status !== 'pending') {
-        return res.json({ status: order.status });
+    let active;
+
+    try {
+        active = await supabase.getActiveSubscription(req.user.id);
+    } catch (error) {
+        console.error('Could not check subscription:', error);
+        return res.status(503).json({ error: 'We could not check your plan. Try again in a moment.' });
+    }
+
+    if (active) {
+        return res.status(409).json({
+            error:
+                'Premium is already active until ' +
+                new Date(active.expires_at).toISOString().slice(0, 10) +
+                '.',
+            code: 'ALREADY_PREMIUM',
+            premiumUntil: active.expires_at
+        });
+    }
+
+    const subscription = {
+        id: crypto.randomUUID(),
+        user_id: req.user.id,
+        email: req.user.email,
+        reference: 'SF-P-' + crypto.randomBytes(8).toString('hex'),
+        amount: PRICE_KOBO,
+        status: 'pending'
+    };
+
+    try {
+        await supabase.insertSubscription(subscription);
+    } catch (error) {
+        console.error('Could not create subscription:', error);
+        return res.status(502).json({ error: 'We could not start your upgrade. Please try again.' });
+    }
+
+    res.json({
+        id: subscription.id,
+        reference: subscription.reference,
+        amount: subscription.amount,
+        priceLabel: PRICE_LABEL,
+        premiumDays: PREMIUM_DAYS
+    });
+});
+
+app.post('/api/subscriptions/:id/verify', requireUser, async (req, res) => {
+    let subscription;
+
+    try {
+        subscription = await supabase.getSubscriptionForUser(req.params.id, req.user.id);
+    } catch (error) {
+        console.error('Could not load subscription:', error);
+        return res.status(503).json({ error: 'We could not load this upgrade. Try again in a moment.' });
+    }
+
+    if (!subscription) return res.status(404).json({ error: 'Upgrade not found.' });
+
+    if (subscription.status === 'active') {
+        return res.json({
+            status: 'active',
+            plan: 'premium',
+            premiumUntil: subscription.expires_at
+        });
+    }
+
+    if (subscription.status !== 'pending') {
+        return res.status(409).json({ error: 'This upgrade is not awaiting payment.' });
     }
 
     let body;
 
     try {
         const response = await fetch(
-            'https://api.paystack.co/transaction/verify/' + encodeURIComponent(order.reference),
+            'https://api.paystack.co/transaction/verify/' +
+                encodeURIComponent(subscription.reference),
             { headers: { Authorization: 'Bearer ' + process.env.PAYSTACK_SECRET_KEY } }
         );
         body = await response.json();
     } catch (error) {
-        console.error('Verify failed:', error);
+        console.error('Upgrade verify failed:', error);
         return res.status(502).json({ error: 'Could not reach the payment provider. Try again.' });
     }
 
@@ -245,28 +372,71 @@ app.post('/api/orders/:id/verify', requireUser, async (req, res) => {
     const paid =
         body.status === true &&
         data.status === 'success' &&
-        data.amount === order.amount &&
+        data.amount === subscription.amount &&
         data.currency === 'NGN';
 
     if (!paid) {
         return res.status(402).json({ error: 'Payment not confirmed yet. Please try again.' });
     }
 
+    const startedAt = new Date();
+    const expiresAt = new Date(startedAt.getTime() + PREMIUM_DAYS * 24 * 60 * 60 * 1000);
+
     try {
-        // Only the first verify wins, so a double click cannot start two jobs.
-        const claimed = await supabase.markPaid(order.id);
-        if (claimed) startProcessing(order.id);
+        const claimed = await supabase.markSubscriptionActive(
+            subscription.id,
+            startedAt.toISOString(),
+            expiresAt.toISOString()
+        );
+
+        if (!claimed) {
+            const current = await supabase.getSubscriptionForUser(
+                subscription.id,
+                req.user.id
+            );
+
+            if (current && current.status === 'active') {
+                return res.json({
+                    status: 'active',
+                    plan: 'premium',
+                    premiumUntil: current.expires_at
+                });
+            }
+
+            return res.status(409).json({ error: 'This upgrade could not be activated.' });
+        }
     } catch (error) {
-        console.error('Could not start order ' + order.id + ':', error);
+        console.error('Could not activate subscription:', error);
         return res.status(500).json({
-            error: 'Payment confirmed, but we could not start your pack. Please try again.'
+            error: 'Payment confirmed, but we could not activate Premium. Please try again.'
         });
     }
 
-    res.json({ status: 'processing' });
+    res.json({
+        status: 'active',
+        plan: 'premium',
+        premiumUntil: expiresAt.toISOString(),
+        premiumDays: PREMIUM_DAYS
+    });
 });
 
-// 3. The dashboard lists the signed-in user's orders
+app.get('/api/me/subscription', requireUser, async (req, res) => {
+    try {
+        const entitlement = await getEntitlement(req.user.id);
+        res.json({
+            ...entitlement,
+            priceLabel: PRICE_LABEL,
+            premiumDays: PREMIUM_DAYS,
+            freeUploadLimit: FREE_UPLOAD_LIMIT,
+            premiumUploadLimit: PREMIUM_UPLOAD_LIMIT
+        });
+    } catch (error) {
+        console.error('Could not load subscription:', error);
+        res.status(503).json({ error: 'Could not load your plan right now. Try again.' });
+    }
+});
+
+// 2. The dashboard lists the signed-in user's orders
 app.get('/api/me/orders', requireUser, async (req, res) => {
     try {
         const orders = await supabase.listOrdersForUser(req.user.id);
@@ -310,6 +480,7 @@ app.get('/api/orders/:id', requireUser, async (req, res) => {
         reference: order.reference,
         original_name: order.original_name,
         amount: order.amount,
+        plan: order.plan,
         created_at: order.created_at,
         paid_at: order.paid_at,
         result
@@ -336,7 +507,8 @@ async function processOrder(orderId) {
         // Loaded here so a parser problem can never take down the whole API.
         const { extractText } = require('./lib/extract.js');
         const text = await extractText(file, order.original_name);
-        const result = await generateStudyPack(text, order.original_name);
+        const plan = order.plan === 'premium' ? 'premium' : 'free';
+        const result = await generateStudyPack(text, order.original_name, plan);
 
         await supabase.saveResult(orderId, result);
 

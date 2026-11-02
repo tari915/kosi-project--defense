@@ -124,6 +124,9 @@ export default function AppShell({ children }) {
                         >
                             Account
                         </Link>
+                        <Link to="/#pricing" onClick={() => setMenuOpen(false)}>
+                            Plans & pricing
+                        </Link>
                         <Link
                             to="/help"
                             aria-current={route.name === 'help' ? 'page' : undefined}
@@ -163,6 +166,7 @@ export default function AppShell({ children }) {
                             <Link to="/new">New pack</Link>
                             <Link to="/dashboard">My packs</Link>
                             <Link to="/sample">Sample</Link>
+                            <Link to="/#pricing">Plans</Link>
                             <Link to="/account">Account</Link>
                             <Link to="/help">Help</Link>
                             <Link to="/">About</Link>

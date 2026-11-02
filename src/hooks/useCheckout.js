@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { createOrder, fetchOrder, verifyOrder } from '../lib/api.js';
-import { getConfig } from '../lib/config.js';
-import { loadPaystack, openCheckout } from '../lib/paystack.js';
+import { createOrder, fetchOrder } from '../lib/api.js';
 import { clearLastOrder, readLastOrder, saveLastOrder } from '../lib/storage.js';
 
 const POLL_EVERY_MS = 3000;
 const POLL_MAX_MS = 5 * 60 * 1000;
 
-const BUSY_PHASES = ['uploading', 'paying', 'verifying', 'processing'];
+const BUSY_PHASES = ['uploading', 'processing'];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -23,7 +21,6 @@ export function useCheckout({ autoRestore = true } = {}) {
     const [recoverable, setRecoverable] = useState(null);
 
     const orderRef = useRef(null);
-    const paidRef = useRef(false);
     const busyRef = useRef(false);
     const aliveRef = useRef(true);
 
@@ -36,8 +33,7 @@ export function useCheckout({ autoRestore = true } = {}) {
         };
     }, []);
 
-    // Pick up an unfinished or finished order from an earlier visit.
-    // Orders are private now, so this waits for a signed-in session.
+    // Pick up an unfinished or finished pack from an earlier visit.
     useEffect(() => {
         if (!autoRestore || authLoading || !userId) return undefined;
 
@@ -70,14 +66,16 @@ export function useCheckout({ autoRestore = true } = {}) {
                     return;
                 }
 
-                const currentRecord = {
-                    ...(saved && saved.id === id ? saved : {}),
-                    id,
-                    reference: order.reference
-                };
+                if (order.status === 'processing' || order.status === 'paid') {
+                    const currentRecord = {
+                        ...(saved && saved.id === id ? saved : {}),
+                        id,
+                        reference: order.reference
+                    };
 
-                orderRef.current = currentRecord;
-                setRecoverable(currentRecord);
+                    orderRef.current = currentRecord;
+                    setRecoverable(currentRecord);
+                }
             } catch {
                 // A stale or someone else's saved order should never block the page.
             }
@@ -90,76 +88,79 @@ export function useCheckout({ autoRestore = true } = {}) {
         };
     }, [authLoading, autoRestore, userId]);
 
-    const confirmOrder = useCallback(async (order) => {
-        busyRef.current = true;
-        paidRef.current = true;
-        setOrderId(order.id);
-        setPhase('verifying');
-        setMessage('Confirming your payment…');
-
-        try {
-            await verifyOrder(order.id);
-            if (!aliveRef.current) return;
-
+    const pollOrder = useCallback(
+        async (order) => {
+            busyRef.current = true;
+            setOrderId(order.id);
             setPhase('processing');
-            setMessage('Payment received. Building your study pack…');
+            setMessage('Building your study pack…');
 
-            const startedAt = Date.now();
+            try {
+                const startedAt = Date.now();
 
-            while (aliveRef.current) {
-                const current = await fetchOrder(order.id);
+                while (aliveRef.current) {
+                    const current = await fetchOrder(order.id);
+                    if (!aliveRef.current) return;
+
+                    if (current.status === 'ready') {
+                        setResult(current.result);
+                        setRestoredResult(false);
+                        setPhase('ready');
+                        setMessage('Your study pack is ready.');
+                        return;
+                    }
+
+                    if (current.status === 'failed') {
+                        throw new Error(
+                            'We could not build your pack. Your upload allowance was used. ' +
+                                'Contact support with reference ' +
+                                order.reference +
+                                '.'
+                        );
+                    }
+
+                    if (Date.now() - startedAt > POLL_MAX_MS) {
+                        setPhase('timeout');
+                        setMessage(
+                            'This is taking longer than usual. Keep this page open or come back later — your pack is saved in your account.'
+                        );
+                        return;
+                    }
+
+                    await sleep(POLL_EVERY_MS);
+                }
+            } catch (error) {
                 if (!aliveRef.current) return;
 
-                if (current.status === 'ready') {
-                    setResult(current.result);
-                    setRestoredResult(false);
-                    setPhase('ready');
-                    setMessage('Your study pack is ready.');
-                    return;
+                if (error.status === 401) {
+                    setRecoverable(order);
+                    openAuth('signin', 'Your session expired. Sign in again.');
                 }
 
-                if (current.status === 'failed') {
-                    throw new Error(
-                        'We could not build your pack. Contact support with your reference, ' +
-                            order.reference +
-                            '.'
-                    );
+                if (error.status === 402) {
+                    setPhase('limit');
+                    setMessage(error.message);
+                } else {
+                    setPhase('failed');
+                    setMessage(error.message);
                 }
-
-                if (Date.now() - startedAt > POLL_MAX_MS) {
-                    setPhase('timeout');
-                    setMessage(
-                        'This is taking longer than usual. Keep this page open or come back later — your order is saved in your account.'
-                    );
-                    return;
-                }
-
-                await sleep(POLL_EVERY_MS);
+            } finally {
+                busyRef.current = false;
             }
-        } catch (error) {
-            if (!aliveRef.current) return;
-            if (error.status === 401) {
-                setRecoverable(order);
-                openAuth('signin', 'Your session expired. Sign in again.');
-            }
-            setPhase('failed');
-            setMessage(error.message);
-        } finally {
-            busyRef.current = false;
-        }
-    }, [openAuth]);
+        },
+        [openAuth]
+    );
 
     const startCheckout = useCallback(
         async (file) => {
             if (busyRef.current) return;
 
             if (!user) {
-                openAuth('signin', 'Sign in to continue to checkout.');
+                openAuth('signin', 'Sign in to create your study pack.');
                 return;
             }
 
             busyRef.current = true;
-            paidRef.current = false;
             setRecoverable(null);
             setResult(null);
             setRestoredResult(false);
@@ -167,7 +168,6 @@ export function useCheckout({ autoRestore = true } = {}) {
             setMessage('Uploading your material…');
 
             try {
-                const config = await getConfig();
                 const order = await createOrder(file);
 
                 orderRef.current = order;
@@ -179,57 +179,25 @@ export function useCheckout({ autoRestore = true } = {}) {
                     createdAt: Date.now()
                 });
 
-                await loadPaystack();
-                if (!aliveRef.current) return;
-
-                setPhase('paying');
-                setMessage('Complete your payment in the secure Paystack window.');
-
-                // Paystack's validator rejects async functions, so onClose is a plain
-                // wrapper around this async check.
-                async function checkClosedPayment() {
-                    try {
-                        await verifyOrder(order.id);
-                        await confirmOrder(order);
-                    } catch (error) {
-                        if (!aliveRef.current) return;
-                        busyRef.current = false;
-                        if (error.status === 401) {
-                            openAuth('signin', 'Your session expired. Sign in again.');
-                        }
-                        setPhase('cancelled');
-                        setMessage(
-                            error.status === 402
-                                ? 'Payment cancelled. You have not been charged.'
-                                : error.status === 401
-                                  ? 'Your session expired. Sign in again to check your order.'
-                                  : 'We could not confirm your payment. Check your order again, or reload this page.'
-                        );
-                    }
-                }
-
-                openCheckout({
-                    key: config.paystackPublicKey,
-                    email: user.email,
-                    amount: order.amount,
-                    reference: order.reference,
-                    onSuccess: () => confirmOrder(order),
-                    onClose: () => {
-                        if (paidRef.current || !aliveRef.current) return;
-                        checkClosedPayment();
-                    }
-                });
+                await pollOrder(order);
             } catch (error) {
                 if (!aliveRef.current) return;
                 busyRef.current = false;
+
                 if (error.status === 401) {
                     openAuth('signin', 'Your session expired. Sign in again.');
                 }
-                setPhase('failed');
-                setMessage(error.message);
+
+                if (error.status === 402) {
+                    setPhase('limit');
+                    setMessage(error.message);
+                } else {
+                    setPhase('failed');
+                    setMessage(error.message);
+                }
             }
         },
-        [confirmOrder, openAuth, user]
+        [openAuth, pollOrder, user]
     );
 
     const resumeOrder = useCallback(async () => {
@@ -246,13 +214,12 @@ export function useCheckout({ autoRestore = true } = {}) {
         orderRef.current = target;
         setRecoverable(null);
 
-        await confirmOrder(target);
-    }, [confirmOrder, openAuth, recoverable, user]);
+        await pollOrder(target);
+    }, [openAuth, pollOrder, recoverable, user]);
 
     const reset = useCallback(() => {
         clearLastOrder();
         orderRef.current = null;
-        paidRef.current = false;
         busyRef.current = false;
         setOrderId(null);
         setResult(null);

@@ -1,17 +1,17 @@
 export const STATUS_LABELS = {
-    pending: 'Awaiting payment',
-    paid: 'Payment confirmed',
+    pending: 'Not completed',
+    paid: 'Queued',
     processing: 'Preparing your pack',
     ready: 'Ready',
     failed: 'Needs attention'
 };
 
 export const STATUS_NOTES = {
-    pending: 'Payment was not completed. Start a new pack whenever you are ready.',
-    paid: 'Payment confirmed. Your pack is queued.',
+    pending: 'This older pack was not completed. Start a new pack whenever you are ready.',
+    paid: 'Your pack is queued.',
     processing: 'We are building your pack now. It will appear here when it is ready.',
     ready: 'Your pack is ready. Open it whenever you want to revise.',
-    failed: 'We could not build this pack. Keep the reference below if you need to follow it up.'
+    failed: 'This upload counted against your plan, but the pack could not be built. Keep the reference below if you need to follow it up.'
 };
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-NG', {

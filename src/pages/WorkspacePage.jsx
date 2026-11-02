@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AppShell from '../components/app/AppShell.jsx';
 import Icon from '../components/Icon.jsx';
+import PlanStatus from '../components/PlanStatus.jsx';
 import UploadCheckout from '../components/UploadCheckout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCheckout } from '../hooks/useCheckout.js';
+import { useSubscription } from '../hooks/useSubscription.js';
 import { fetchMyOrders } from '../lib/api.js';
-import { getConfig } from '../lib/config.js';
 import {
     STATUS_LABELS,
     displayName,
@@ -16,7 +17,7 @@ import {
 import { Link, navigate } from '../lib/router.jsx';
 import { validateFile } from '../lib/validate.js';
 
-const inside = [
+const genericContents = [
     {
         icon: 'file',
         title: 'A focused summary',
@@ -25,51 +26,82 @@ const inside = [
     {
         icon: 'cards',
         title: 'Flashcards for recall',
-        text: 'Question on one side, answer on the other. Practise remembering.'
+        text: 'Question on one side, answer on the other. Included with Premium.'
     },
     {
         icon: 'quiz',
         title: 'Practice questions',
-        text: 'Check what you know, with answers and explanations.'
+        text: 'Five questions on Free, twelve with explanations on Premium.'
+    }
+];
+
+const freeContents = [
+    {
+        icon: 'file',
+        title: 'A focused summary',
+        text: 'The main ideas pulled together, so you know where to begin.'
+    },
+    {
+        icon: 'quiz',
+        title: '5 practice questions',
+        text: 'Check what you know before you move on to the next topic.'
+    },
+    {
+        icon: 'book',
+        title: 'Saved in your library',
+        text: 'Come back to this pack whenever you need to revise.'
+    }
+];
+
+const premiumContents = [
+    {
+        icon: 'file',
+        title: 'A detailed summary',
+        text: 'A fuller pass over the material, with the exam-relevant points brought forward.'
+    },
+    {
+        icon: 'book',
+        title: 'Revision notes',
+        text: 'Short sections that break the topic into ideas you can work through.'
+    },
+    {
+        icon: 'cards',
+        title: 'Flashcards',
+        text: 'Eight to twelve cards for active recall, built from your document.'
+    },
+    {
+        icon: 'quiz',
+        title: '12 practice questions',
+        text: 'More questions, with an explanation for each answer.'
     }
 ];
 
 export default function WorkspacePage() {
     const checkout = useCheckout({ autoRestore: false });
     const { user, loading: authLoading, openAuth } = useAuth();
+    const plan = useSubscription();
 
     const [file, setFile] = useState(null);
     const [errors, setErrors] = useState({ file: '' });
-    const [config, setConfig] = useState(null);
-    const [configState, setConfigState] = useState('loading');
     const [recent, setRecent] = useState([]);
     const [recentLoaded, setRecentLoaded] = useState(false);
 
-    const mounted = useRef(true);
     const previousUserId = useRef(user?.id || null);
     const userId = user?.id || null;
     const { reset, phase, orderId, busy } = checkout;
 
-    const loadConfig = useCallback(async () => {
-        setConfigState('loading');
-        try {
-            const next = await getConfig();
-            if (mounted.current) {
-                setConfig(next);
-                setConfigState('ready');
-            }
-        } catch {
-            if (mounted.current) setConfigState('error');
-        }
-    }, []);
+    const {
+        subscription,
+        loading: planLoading,
+        error: planError,
+        phase: planPhase,
+        message: planMessage,
+        busy: planBusy,
+        upgrade: upgradePlan,
+        refresh: refreshPlan
+    } = plan;
 
-    useEffect(() => {
-        mounted.current = true;
-        loadConfig();
-        return () => {
-            mounted.current = false;
-        };
-    }, [loadConfig]);
+    const premium = subscription?.plan === 'premium';
 
     useEffect(() => {
         if (previousUserId.current && previousUserId.current !== userId) {
@@ -111,6 +143,13 @@ export default function WorkspacePage() {
         }
     }, [orderId, phase]);
 
+    // A finished, failed or blocked upload changes the usage count on the server.
+    useEffect(() => {
+        if (['ready', 'failed', 'timeout', 'limit'].includes(phase)) {
+            refreshPlan();
+        }
+    }, [phase, refreshPlan]);
+
     function handleFile(next) {
         const error = next ? validateFile(next) : '';
         setErrors({ file: error });
@@ -125,6 +164,8 @@ export default function WorkspacePage() {
             return;
         }
 
+        if (planLoading || (subscription && !subscription.canGenerate)) return;
+
         const error = validateFile(file);
         setErrors({ file: error });
 
@@ -133,14 +174,24 @@ export default function WorkspacePage() {
             return;
         }
 
-        if (configState !== 'ready' || !config?.paystackPublicKey) return;
-
         checkout.startCheckout(file);
     }
 
     function openResult() {
         if (orderId) navigate('/pack/' + encodeURIComponent(orderId));
     }
+
+    const contents = premium
+        ? premiumContents
+        : subscription
+          ? freeContents
+          : genericContents;
+
+    const planFact = planLoading
+        ? 'Checking your plan…'
+        : premium
+          ? `Premium · ${subscription.remaining} uploads left`
+          : 'Free plan to start';
 
     return (
         <AppShell>
@@ -153,8 +204,9 @@ export default function WorkspacePage() {
                                 Start with your <em>notes.</em>
                             </h1>
                             <p className="app-page-lede">
-                                One document becomes a focused summary, a deck of flashcards and a
-                                set of practice questions — ready whenever you are.
+                                Bring one document. StudyFlow turns it into a summary, revision
+                                notes, flashcards and practice questions — with one full pack free
+                                to start.
                             </p>
                         </div>
 
@@ -164,8 +216,8 @@ export default function WorkspacePage() {
                                 Private to your account
                             </span>
                             <span>
-                                <Icon name="check" />
-                                One payment per pack
+                                <Icon name={premium ? 'leaf' : 'check'} />
+                                {planFact}
                             </span>
                         </div>
                     </header>
@@ -187,9 +239,13 @@ export default function WorkspacePage() {
                                 authLoading={authLoading}
                                 onSignIn={() => openAuth('signin')}
                                 errors={errors}
-                                config={config}
-                                configState={configState}
-                                onReloadConfig={loadConfig}
+                                subscription={subscription}
+                                subscriptionLoading={planLoading}
+                                onUpgrade={upgradePlan}
+                                upgradePhase={planPhase}
+                                upgradeBusy={planBusy}
+                                upgradeError={planError}
+                                onRefreshSubscription={refreshPlan}
                                 checkout={checkout}
                                 onBuy={buy}
                                 onSample={() => navigate('/sample')}
@@ -204,13 +260,56 @@ export default function WorkspacePage() {
                         </div>
 
                         <aside className="workspace-side" aria-label="Study pack details">
+                            {user ? (
+                                <PlanStatus
+                                    subscription={subscription}
+                                    loading={planLoading}
+                                    error={planError}
+                                    phase={planPhase}
+                                    message={planMessage}
+                                    busy={planBusy}
+                                    onUpgrade={upgradePlan}
+                                    onRefresh={refreshPlan}
+                                />
+                            ) : (
+                                <section className="plan-card plan-card--guest">
+                                    <div className="plan-card-head">
+                                        <span className="plan-badge">
+                                            <Icon name="user" />
+                                            Free plan
+                                        </span>
+                                    </div>
+                                    <h2>Your first pack is free.</h2>
+                                    <p>
+                                        Sign in to create one full study pack. Premium adds 10
+                                        uploads over 30 days, flashcards and more questions.
+                                    </p>
+                                    <div className="plan-actions">
+                                        <button
+                                            type="button"
+                                            className="button secondary"
+                                            onClick={() => openAuth('signup')}
+                                        >
+                                            Create an account
+                                            <Icon name="arrow" />
+                                        </button>
+                                    </div>
+                                </section>
+                            )}
+
                             <section className="side-card">
                                 <div className="side-card-head">
                                     <h2>What's inside</h2>
-                                    <span className="side-label">Every pack</span>
+                                    <span className="side-label">
+                                        {premium
+                                            ? 'Premium pack'
+                                            : subscription
+                                              ? 'Free pack'
+                                              : 'Inside StudyFlow'}
+                                    </span>
                                 </div>
                                 <ul className="side-list">
-                                    {inside.map((item) => (
+                                    {contents.map((item) => (
                                         <li key={item.title}>
                                             <span className="side-icon">
                                                 <Icon name={item.icon} />
@@ -252,7 +351,7 @@ export default function WorkspacePage() {
                                                 <span className="recent-body">
                                                     <strong>{fileTitle(order.original_name)}</strong>
                                                     <small>
-                                                        {STATUS_LABELS[order.status] || 'Saved order'}
+                                                        {STATUS_LABELS[order.status] || 'Saved pack'}
                                                         {' · '}
                                                         {formatDate(order.created_at, true)}
                                                     </small>
@@ -272,7 +371,7 @@ export default function WorkspacePage() {
                                 <h2>Cell biology, ready to explore.</h2>
                                 <p>
                                     See how a summary, flashcards and practice questions fit
-                                    together. No upload or payment needed.
+                                    together. No upload needed.
                                 </p>
                                 <Link to="/sample" className="text-link">
                                     Open the sample
@@ -281,7 +380,7 @@ export default function WorkspacePage() {
                             </section>
 
                             <p className="workspace-help">
-                                Questions about uploads or payment? <Link to="/help">Visit help</Link>.
+                                Questions about your plan or uploads? <Link to="/help">Visit help</Link>.
                             </p>
                         </aside>
                     </div>

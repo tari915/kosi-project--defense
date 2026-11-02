@@ -1,6 +1,8 @@
 import AppShell from '../components/app/AppShell.jsx';
 import Icon from '../components/Icon.jsx';
+import PlanStatus from '../components/PlanStatus.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useSubscription } from '../hooks/useSubscription.js';
 import { formatDate, displayName } from '../lib/format.js';
 import { Link, navigate } from '../lib/router.jsx';
 
@@ -23,6 +25,18 @@ function AccountSkeleton() {
 
 export default function AccountPage() {
     const { user, loading, openAuth, signOut } = useAuth();
+    const plan = useSubscription();
+
+    const {
+        subscription,
+        loading: planLoading,
+        error: planError,
+        phase: planPhase,
+        message: planMessage,
+        busy: planBusy,
+        upgrade: upgradePlan,
+        refresh: refreshPlan
+    } = plan;
 
     if (loading) {
         return (
@@ -44,8 +58,8 @@ export default function AccountPage() {
                                     Your packs, <em>in one place.</em>
                                 </h1>
                                 <p className="app-page-lede">
-                                    An account keeps your study packs private and lets you reopen
-                                    them whenever you need them.
+                                    An account keeps your study packs private, tracks your plan
+                                    and lets you reopen them whenever you need them.
                                 </p>
                             </div>
                         </header>
@@ -59,8 +73,8 @@ export default function AccountPage() {
                                 <h2>Sign in when you're ready.</h2>
                                 <p>
                                     You can explore the sample without an account. When you create
-                                    a pack, signing in keeps the order and the finished pack in
-                                    your library.
+                                    a pack, signing in keeps the pack in your library and puts
+                                    your free plan in place.
                                 </p>
                                 <div className="account-actions">
                                     <button
@@ -99,9 +113,9 @@ export default function AccountPage() {
                                     <p>Come back to a pack before a test or a tutorial.</p>
                                 </div>
                                 <div>
-                                    <Icon name="clock" />
-                                    <strong>One payment per pack</strong>
-                                    <p>No subscription and no recurring charge.</p>
+                                    <Icon name="leaf" />
+                                    <strong>A free pack to start</strong>
+                                    <p>Try one full pack before you decide on Premium.</p>
                                 </div>
                             </div>
                         </section>
@@ -112,6 +126,14 @@ export default function AccountPage() {
     }
 
     const name = displayName(user.email);
+
+    const billingLabel = subscription
+        ? subscription.plan === 'premium'
+            ? `Premium · until ${formatDate(subscription.premiumUntil)}`
+            : 'Free plan'
+        : planLoading
+          ? 'Checking your plan…'
+          : 'Unavailable';
 
     return (
         <AppShell>
@@ -124,56 +146,72 @@ export default function AccountPage() {
                                 Hello, <em>{name}.</em>
                             </h1>
                             <p className="app-page-lede">
-                                Your account details, security and shortcuts to the rest of
+                                Your plan, account details and shortcuts to the rest of
                                 StudyFlow.
                             </p>
                         </div>
                     </header>
 
                     <div className="account-grid">
-                        <section className="account-card account-identity-card">
-                            <div className="account-identity">
-                                <span className="account-avatar-large" aria-hidden="true">
-                                    {user.email.charAt(0).toUpperCase()}
-                                </span>
-                                <div>
-                                    <h2>{user.email}</h2>
-                                    <p className="small muted">Signed in with email and password</p>
+                        <div className="account-main">
+                            <section className="account-card account-identity-card">
+                                <div className="account-identity">
+                                    <span className="account-avatar-large" aria-hidden="true">
+                                        {user.email.charAt(0).toUpperCase()}
+                                    </span>
+                                    <div>
+                                        <h2>{user.email}</h2>
+                                        <p className="small muted">
+                                            Signed in with email and password
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <dl className="account-rows">
-                                <div className="account-row">
-                                    <dt>Email</dt>
-                                    <dd>{user.email}</dd>
-                                </div>
-                                <div className="account-row">
-                                    <dt>Member since</dt>
-                                    <dd>{formatDate(user.created_at)}</dd>
-                                </div>
-                                <div className="account-row">
-                                    <dt>Billing</dt>
-                                    <dd>One payment per pack</dd>
-                                </div>
-                            </dl>
+                                <dl className="account-rows">
+                                    <div className="account-row">
+                                        <dt>Email</dt>
+                                        <dd>{user.email}</dd>
+                                    </div>
+                                    <div className="account-row">
+                                        <dt>Member since</dt>
+                                        <dd>{formatDate(user.created_at)}</dd>
+                                    </div>
+                                    <div className="account-row">
+                                        <dt>Plan</dt>
+                                        <dd>{billingLabel}</dd>
+                                    </div>
+                                </dl>
 
-                            <div className="account-card-foot">
-                                <Link to="/dashboard" className="button primary">
-                                    Open my packs
-                                    <Icon name="arrow" />
-                                </Link>
-                                <button
-                                    type="button"
-                                    className="button secondary"
-                                    onClick={async () => {
-                                        await signOut();
-                                        navigate('/');
-                                    }}
-                                >
-                                    Sign out
-                                </button>
-                            </div>
-                        </section>
+                                <div className="account-card-foot">
+                                    <Link to="/dashboard" className="button primary">
+                                        Open my packs
+                                        <Icon name="arrow" />
+                                    </Link>
+                                    <button
+                                        type="button"
+                                        className="button secondary"
+                                        onClick={async () => {
+                                            await signOut();
+                                            navigate('/');
+                                        }}
+                                    >
+                                        Sign out
+                                    </button>
+                                </div>
+                            </section>
+
+                            <PlanStatus
+                                subscription={subscription}
+                                loading={planLoading}
+                                error={planError}
+                                phase={planPhase}
+                                message={planMessage}
+                                busy={planBusy}
+                                onUpgrade={upgradePlan}
+                                onRefresh={refreshPlan}
+                                variant="account"
+                            />
+                        </div>
 
                         <div className="account-side">
                             <section className="account-card">
@@ -213,6 +251,13 @@ export default function AccountPage() {
                                     <span>
                                         <Icon name="cards" />
                                         My packs
+                                    </span>
+                                    <Icon name="chevron" />
+                                </Link>
+                                <Link to="/#pricing">
+                                    <span>
+                                        <Icon name="leaf" />
+                                        Plans & pricing
                                     </span>
                                     <Icon name="chevron" />
                                 </Link>

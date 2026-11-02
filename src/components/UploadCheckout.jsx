@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
 import Icon from './Icon.jsx';
+import { PlanBadge } from './PlanStatus.jsx';
+import { formatDate } from '../lib/format.js';
 
-const phaseLabels = {
+const PHASE_LABELS = {
     uploading: 'Uploading your notes',
-    paying: 'Waiting for Paystack',
-    verifying: 'Confirming payment',
-    processing: 'Preparing your pack'
+    processing: 'Building your study pack'
 };
 
 export default function UploadCheckout({
@@ -16,9 +16,13 @@ export default function UploadCheckout({
     authLoading,
     onSignIn,
     errors,
-    config,
-    configState,
-    onReloadConfig,
+    subscription,
+    subscriptionLoading,
+    onUpgrade,
+    upgradePhase,
+    upgradeBusy,
+    upgradeError,
+    onRefreshSubscription,
     checkout,
     onBuy,
     onSample,
@@ -28,22 +32,32 @@ export default function UploadCheckout({
     const [dragging, setDragging] = useState(false);
     const { phase, message, busy, recoverable, resumeOrder } = checkout;
     const app = variant === 'app';
-    const step = ['uploading'].includes(phase)
-        ? 0
-        : ['paying', 'verifying'].includes(phase)
-          ? 1
-          : ['processing', 'ready'].includes(phase)
-            ? 2
-            : 0;
+
+    const premium = subscription?.plan === 'premium';
+    const used = Math.max(0, subscription?.uploadsUsed || 0);
+    const limit = Math.max(1, subscription?.uploadLimit || 1);
+    const remaining = Math.max(0, subscription?.remaining || 0);
+    const percent = Math.min(100, Math.round((used / limit) * 100));
+    const outOfUploads = Boolean(user && subscription && !subscription.canGenerate);
+    const limitReached = outOfUploads || phase === 'limit';
+    const planPending = Boolean(user && subscriptionLoading);
+    const locked = limitReached;
+    const price = subscription?.priceLabel || '₦5,000';
+    const days = subscription?.premiumDays || 30;
+    const premiumUntil = subscription?.premiumUntil
+        ? formatDate(subscription.premiumUntil)
+        : 'your renewal date';
+
+    const step = phase === 'uploading' ? 0 : phase === 'processing' ? 1 : phase === 'ready' ? 2 : 0;
 
     function select(next) {
-        if (!busy) onFile(next);
+        if (!busy && !locked) onFile(next);
     }
 
     const card = (
         <div className={'checkout-card' + (app ? ' app-checkout' : '')} id="pricing">
             <ol className="checkout-steps" aria-label="Study pack progress">
-                {['Your material', 'Payment', 'Study pack'].map((label, i) => (
+                {['Your material', 'Generate', 'Study pack'].map((label, i) => (
                     <li
                         key={label}
                         className={i <= step ? 'active' : ''}
@@ -68,6 +82,12 @@ export default function UploadCheckout({
                     <Icon name="leaf" />
                 </div>
 
+                <p className="checkout-sub">
+                    {premium
+                        ? 'Premium pack: a detailed summary, revision notes, flashcards and 12 questions with explanations.'
+                        : 'Free pack: a focused summary and 5 practice questions. Upgrade anytime for more.'}
+                </p>
+
                 {errors.file && (
                     <div className="error-summary" role="alert">
                         <strong>A quick check before you continue</strong>
@@ -81,7 +101,7 @@ export default function UploadCheckout({
                     accept=".pdf,.docx,.txt"
                     id="fileInput"
                     hidden
-                    disabled={busy}
+                    disabled={busy || locked}
                     onChange={(event) => select(event.target.files?.[0] || null)}
                 />
 
@@ -89,7 +109,7 @@ export default function UploadCheckout({
                     className={`drop-area ${dragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
                     onDragOver={(event) => {
                         event.preventDefault();
-                        if (!busy) setDragging(true);
+                        if (!busy && !locked) setDragging(true);
                     }}
                     onDragLeave={(event) => {
                         if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
@@ -116,7 +136,7 @@ export default function UploadCheckout({
                                 <button
                                     type="button"
                                     className="text-link"
-                                    disabled={busy}
+                                    disabled={busy || locked}
                                     onClick={() => input.current.click()}
                                 >
                                     Change file
@@ -124,7 +144,7 @@ export default function UploadCheckout({
                                 <button
                                     type="button"
                                     className="text-link danger"
-                                    disabled={busy}
+                                    disabled={busy || locked}
                                     onClick={() => {
                                         select(null);
                                         input.current.value = '';
@@ -145,7 +165,7 @@ export default function UploadCheckout({
                                 type="button"
                                 className="button secondary"
                                 id="file-picker"
-                                disabled={busy}
+                                disabled={busy || locked}
                                 aria-describedby={errors.file ? 'file-error' : undefined}
                                 onClick={() => input.current.click()}
                             >
@@ -167,7 +187,9 @@ export default function UploadCheckout({
                     {user ? (
                         <div className="od-field">
                             <strong className="file-full">{user.email}</strong>
-                            <span className="small muted">Your pack will be saved to this account.</span>
+                            <span className="small muted">
+                                Your pack will be saved to this account.
+                            </span>
                         </div>
                     ) : (
                         <button
@@ -182,69 +204,112 @@ export default function UploadCheckout({
                     )}
                 </div>
 
-                <div className="checkout-total od-row">
-                    <div className="od-field od-fill">
-                        <strong>One study pack</strong>
-                        <span className="small muted">A single payment. No subscription.</span>
-                    </div>
-                    {configState === 'loading' ? (
-                        <span className="price-skeleton" aria-label="Loading price" />
-                    ) : (
-                        <strong className="checkout-price od-nowrap">
-                            {config?.priceLabel || '—'}
-                        </strong>
-                    )}
-                </div>
-
-                {configState === 'error' && (
-                    <div className="inline-message" role="status">
-                        <p>Pricing is unavailable right now. You can still explore the sample pack.</p>
-                        <button type="button" className="text-link" onClick={onReloadConfig}>
-                            Retry pricing
-                            <Icon name="refresh" />
-                        </button>
+                {user && subscriptionLoading && (
+                    <div className="checkout-plan is-loading" role="status">
+                        <span className="small muted">Checking your plan…</span>
                     </div>
                 )}
 
-                <div className="preview-disclosure od-row-top">
-                    <Icon name="info" />
-                    <p>
-                        Review the price before continuing. Your study pack will be generated from
-                        the document you upload.
-                    </p>
-                </div>
-
-                {config && !config.paystackPublicKey && (
-                    <p className="field-error">
-                        Checkout is unavailable right now. You can explore the sample pack.
-                    </p>
+                {user && !subscriptionLoading && subscription && (
+                    <div className="checkout-plan">
+                        <div className="checkout-plan-row">
+                            <PlanBadge subscription={subscription} />
+                            <span className="small muted">
+                                {premium
+                                    ? `${used} of ${limit} uploads used`
+                                    : used >= limit
+                                      ? 'Free pack used'
+                                      : '1 free pack available'}
+                            </span>
+                        </div>
+                        <div
+                            className={
+                                'plan-meter' + (subscription.canGenerate ? '' : ' plan-meter--full')
+                            }
+                            role="progressbar"
+                            aria-label="Uploads used"
+                            aria-valuemin={0}
+                            aria-valuemax={limit}
+                            aria-valuenow={used}
+                        >
+                            <span style={{ width: percent + '%' }} />
+                        </div>
+                        <span className="small muted">
+                            {subscription.canGenerate
+                                ? `${remaining} ${remaining === 1 ? 'upload' : 'uploads'} left`
+                                : 'No uploads left on this plan'}
+                        </span>
+                    </div>
                 )}
 
-                <button
-                    type="submit"
-                    className="button primary wide"
-                    disabled={
-                        busy ||
-                        authLoading ||
-                        configState !== 'ready' ||
-                        (Boolean(user) && !config?.paystackPublicKey)
-                    }
-                >
-                    <span>
-                        {phaseLabels[phase] ||
-                            (!user ? 'Sign in to continue' : 'Continue to Paystack')}
-                    </span>
-                    {!busy && <Icon name="arrow" />}
-                </button>
+                {limitReached ? (
+                    <div className="upgrade-prompt">
+                        <span className="upgrade-prompt-icon">
+                            <Icon name={premium ? 'clock' : 'leaf'} />
+                        </span>
+                        <div>
+                            <h3>{premium ? 'All Premium uploads used' : 'Your free pack is used'}</h3>
+                            <p>
+                                {premium
+                                    ? `Premium ends ${premiumUntil}. Renew after that for another ${limit} uploads. Your existing packs stay in your library.`
+                                    : 'Upgrade to Premium for 10 uploads over 30 days, detailed summaries, flashcards and more practice questions.'}
+                            </p>
+                            {!premium && onUpgrade && (
+                                <button
+                                    type="button"
+                                    className="button primary"
+                                    onClick={onUpgrade}
+                                    disabled={upgradeBusy}
+                                >
+                                    {upgradeBusy
+                                        ? 'Opening Paystack…'
+                                        : `Upgrade — ${price} / ${days} days`}
+                                    {!upgradeBusy && <Icon name="arrow" />}
+                                </button>
+                            )}
+                            {upgradeError && (
+                                <p className="field-error" role="alert">
+                                    {upgradeError}
+                                </p>
+                            )}
+                            <button
+                                type="button"
+                                className="text-link"
+                                onClick={onRefreshSubscription}
+                            >
+                                Refresh my plan
+                                <Icon name="refresh" />
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <button
+                        type="submit"
+                        className="button primary wide"
+                        disabled={busy || authLoading || planPending}
+                    >
+                        <span>
+                            {PHASE_LABELS[phase] ||
+                                (!user
+                                    ? 'Sign in to continue'
+                                    : premium
+                                      ? 'Create a Premium pack'
+                                      : 'Create my free pack')}
+                        </span>
+                        {!busy && <Icon name="arrow" />}
+                    </button>
+                )}
 
                 <p className="checkout-security small od-row">
-                    <Icon name="lock" />
-                    Payment verified by Paystack
+                    <Icon name={user ? 'check' : 'lock'} />
+                    {user ? 'Included in your plan — no per-pack payment' : 'Private to your account'}
                 </p>
 
                 {message && (
                     <div
-                        className={`checkout-feedback ${phase === 'failed' ? 'is-error' : ''}`}
+                        className={`checkout-feedback ${
+                            phase === 'failed' || phase === 'limit' ? 'is-error' : ''
+                        }`}
                         role="status"
                     >
                         <div className="od-row">
@@ -252,14 +317,18 @@ export default function UploadCheckout({
                                 name={
                                     phase === 'ready'
                                         ? 'check'
-                                        : phase === 'failed'
+                                        : phase === 'failed' || phase === 'limit'
                                           ? 'info'
                                           : 'clock'
                                 }
                             />
                             <strong>
-                                {phaseLabels[phase] ||
-                                    (phase === 'ready' ? 'Your pack is ready' : 'Order update')}
+                                {PHASE_LABELS[phase] ||
+                                    (phase === 'ready'
+                                        ? 'Your pack is ready'
+                                        : phase === 'limit'
+                                          ? 'Upload limit reached'
+                                          : 'Pack update')}
                             </strong>
                         </div>
                         <p>{message}</p>
@@ -279,9 +348,9 @@ export default function UploadCheckout({
 
                 {recoverable && !busy && phase !== 'ready' && (
                     <div className="recover-order">
-                        <p className="small muted">Already started? Check your saved order.</p>
+                        <p className="small muted">Already started? Check your saved pack.</p>
                         <button type="button" className="text-link" onClick={resumeOrder}>
-                            Check saved order
+                            Check saved pack
                             <Icon name="refresh" />
                         </button>
                     </div>
@@ -314,7 +383,10 @@ export default function UploadCheckout({
                     <br />
                     <span className="muted">We'll take it from here.</span>
                 </h2>
-                <p>One document. One focused study pack. Your next revision session starts here.</p>
+                <p>
+                    One document. One focused study pack. Your first one is free, and Premium
+                    unlocks more when you need it.
+                </p>
                 <div className="intake-benefits">
                     <div className="od-row">
                         <Icon name="file" />
